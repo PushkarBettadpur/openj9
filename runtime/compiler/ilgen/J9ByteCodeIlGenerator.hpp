@@ -82,6 +82,14 @@ public:
    }
    virtual TR::ResolvedMethodSymbol *methodSymbol() const { return _methodSymbol;}
 
+   typedef TR::typed_allocator<std::pair<TR::Node*, TR::Node*>, TR::Region &> memRegionAllocator;
+   // A mapping between Array Pointer -> Contiguous-Array-View pointer
+   std::map<TR::Node*, TR::Node*, std::less<TR::Node *>, memRegionAllocator> _memRegionMap;
+
+   // A debugging tool that tracks how many arrays we would like to enable
+   // the contiguous-array-view optimization for. This can help us in situations
+   // where we want to figure out which specific array is causing an issue.
+   static int32_t _arrayChanges;
 private:
 
    bool trace(){ return comp()->getOption(TR_TraceBC) || comp()->getOption(TR_TraceILGen); }
@@ -190,6 +198,8 @@ private:
    void         storeAuto(TR::DataType type, int32_t slot, bool isAdjunct = false);
    void         storeArrayElement(TR::DataType dt){ storeArrayElement(dt, comp()->il.opCodeForIndirectArrayStore(dt)); }
    void         storeArrayElement(TR::DataType dt, TR::ILOpCodes opCode, bool checks = true);
+
+   void         createContiguousArrayView(TR::Node* arrayBase);
 
    void         calculateElementAddressInContiguousArray(int32_t, int32_t);
    void         calculateIndexFromOffsetInContiguousArray(int32_t, int32_t);

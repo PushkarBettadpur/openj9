@@ -41,6 +41,7 @@
 #include "il/Node_inlines.hpp"
 #include "il/TreeTop.hpp"
 #include "il/TreeTop_inlines.hpp"
+#include "il/AutomaticSymbol.hpp"
 #include "env/j9fieldsInfo.h"
 #include "env/VMJ9.h"
 #include "ilgen/ClassLookahead.hpp"
@@ -138,6 +139,8 @@ static void printStack(TR::Compilation *comp, TR_Stack<TR::Node*> *stack, const 
    else
       {
       TR_BitVector nodesAlreadyPrinted(comp->getNodeCount(), comp->trMemory(), stackAlloc, growable);
+      if (comp->getDebug() == NULL)
+         return;
       comp->getDebug()->saveNodeChecklist(nodesAlreadyPrinted);
       char buf[30];
       traceMsg(comp, "   /--- %s ------------------------", message);
@@ -1087,7 +1090,8 @@ TR_J9ByteCodeIlGenerator::genNodeAndPopChildren(TR::ILOpCodes opcode, int32_t nu
          TR::StackMemoryRegion stackMemoryRegion(*comp()->trMemory());
 
          TR_BitVector before(comp()->getNodeCount(), trMemory(), stackAlloc, growable);
-         printStack(comp(), _stack, "stack after expandPlaceholderCalls");
+         //if (comp()->getOption(TR_TraceILGen))
+         //    printStack(comp(), _stack, "stack after expandPlaceholderCalls");
          comp()->getDebug()->restoreNodeChecklist(before);
          }
       }
@@ -2127,10 +2131,12 @@ TR_J9ByteCodeIlGenerator::genArrayBoundsCheck(TR::Node * offset, int32_t width)
 void
 TR_J9ByteCodeIlGenerator::calculateElementAddressInContiguousArray(int32_t width, int32_t headerSize)
    {
+   traceMsg(comp(), "In calculateElementAddressInContiguousArray\n");
    const bool isForArrayAccess = true;
    int32_t shift = TR::TransformUtil::convertWidthToShift(width);
    if (shift)
       {
+      traceMsg(comp(), "shift > 0 (i.e., is true)\n");
       loadConstant(TR::iconst, shift);
       // generate a TR::aladd instead if required
       if (comp()->target().is64Bit())
@@ -2148,6 +2154,26 @@ TR_J9ByteCodeIlGenerator::calculateElementAddressInContiguousArray(int32_t width
       {
       if (headerSize > 0)
          {
+         traceMsg(comp(), "64 bit and headerSize > 0\n");
+         /** 
+          * Typically in this part of the code, we calculate the element address. 
+          * Instead, we return before we get too far so we can populate the contiguous-array-view
+          * map.
+          *
+          * We add checks for the following:
+          * 1. Are internal pointers enabled?
+          * 2. Are we within the limit for the number of contiguous-array-view changes we have allowed?
+          * 3. Have we imposed a limit? (If we want unlimited such changes, zzArrayModificationCounter is -99 -- it's hacky)
+          */
+         if (!comp()->getOption(TR_DisableInternalPointers) && (_arrayChanges <= comp()->getOptions()->getZZArrayModificationCounter() || comp()->getOptions()->getZZArrayModificationCounter() == -99)) {
+             if (!shift) {
+    		 traceMsg(comp(), "!shift \n");
+                 genUnary(TR::i2l, isForArrayAccess);
+             }
+	     return;
+         }
+         else
+             traceMsg(comp(), "\n** Not making any more modifications as _arrayChanges=%d\n", _arrayChanges);
          loadConstant(TR::lconst, (int64_t)headerSize);
          // shift could have been null here (if no scaling is done for the index
          // ...so check for that and introduce an i2l if required for the aladd
@@ -2218,6 +2244,45 @@ TR_J9ByteCodeIlGenerator::calculateIndexFromOffsetInContiguousArray(int32_t widt
       }
    }
 
+/**
+ * Method to create the contiguous-array-view for arrays in Gencon.
+ * Effectively, the method takes in a pointer to the array header adds the size
+ * of the header (to get a pointer to the first data element).
+ * To avoid GC problems, we mark the pointer to the first data element as an 
+ * 'internal pointer' and set the array base pointer as a pinning array pointer.
+ * We also mark these pointers as special so they cannot be reused
+ *
+ * parameter: arrayBase -> Node referencing the array object (array header)
+ */
+void
+TR_J9ByteCodeIlGenerator::createContiguousArrayView(TR::Node* arrayBase) 
+    {
+
+    /* Create the contiguous array view node  i.e., header + header_size */
+    TR::Node * loadConstNode = TR::Node::create(TR::lconst, 0);
+    loadConstNode->setConstValue(TR::Compiler->om.contiguousArrayHeaderSizeInBytes());    
+    TR::Node * addNode = TR::Node::create(TR::aladd, 2, arrayBase, loadConstNode);
+    
+    /* Mark node as an internal pointer */
+    addNode->setIsInternalPointer(true);
+
+    /* create symbol for the array object reference (header pointer) */
+    TR::SymbolReference *arrAddrSymRef = symRefTab()->createTemporary(_methodSymbol, TR::Address);
+   
+     /* Mark these as non reusable */
+    arrAddrSymRef->setReuse(false);
+    
+    TR::Node *arrStore = TR::Node::createStore(arrAddrSymRef, arrayBase);
+    genTreeTop(arrStore);
+   
+    /* Mark this symbol as a pinning array pointer */
+    addNode->setPinningArrayPointer(arrAddrSymRef->getSymbol()->castToAutoSymbol());
+    genTreeTop(addNode);
+
+    /* cache the contiguous array view node for future use */ 
+    _memRegionMap[arrayBase] = addNode;
+    }
+
 
 // Helper to calculate the address of the element of an array
 // RTSJ: if we should be generating arraylets, access the spine
@@ -2225,7 +2290,7 @@ TR_J9ByteCodeIlGenerator::calculateIndexFromOffsetInContiguousArray(int32_t widt
 void
 TR_J9ByteCodeIlGenerator::calculateArrayElementAddress(TR::DataType dataType, bool checks)
    {
-
+   traceMsg(comp(), "In calculateElementAddress\n");
    if (comp()->getOption(TR_EnableSIMDLibrary))
        {
        if (dataType == TR::VectorInt8)
@@ -2309,7 +2374,43 @@ TR_J9ByteCodeIlGenerator::calculateArrayElementAddress(TR::DataType dataType, bo
       {
       int32_t arrayHeaderSize = TR::Compiler->om.contiguousArrayHeaderSizeInBytes();
       calculateElementAddressInContiguousArray(width, arrayHeaderSize);
-      _stack->top()->setIsInternalPointer(true);
+    
+      /**
+       * Check for the following:
+       *     1. Internal Pointers enabled?
+       *     2. 64 bit?
+       *     3. Number of changes under limit?
+       *     4. Have we imposed a limit (-99 indicates unlimited changes)
+       */
+      if (comp()->getOption(TR_DisableInternalPointers) || (!comp()->target().is64Bit() || (_arrayChanges > comp()->getOptions()->getZZArrayModificationCounter() && comp()->getOptions()->getZZArrayModificationCounter() != -99))) {
+          traceMsg(comp(), "\n** Not making any more modifications as _arrayChanges=%d\n", _arrayChanges);
+          _stack->top()->setIsInternalPointer(true);
+      }
+      else {
+          TR::Node *lshl = _stack->pop();
+          TR::Node *obj_ptr = _stack->pop();
+
+          // Use contiguous-array-view from the cache. Create a contiguous-array-view
+          // if not found in the cache.
+          if (_memRegionMap.find(obj_ptr) == _memRegionMap.end()) {   
+              createContiguousArrayView(obj_ptr);
+              _arrayChanges++;
+          }
+
+          TR::Node* temp = _memRegionMap[obj_ptr];
+          if (temp->getPinningArrayPointer() != NULL)
+              traceMsg(comp(), "\n Pinning Array Pointer Found \n");
+          if (temp->isInternalPointer())
+              traceMsg(comp(), "\n It is an Internal Pointer \n");     
+          TR::Node * addNode = TR::Node::create(TR::aladd, 2, temp, lshl);
+          _stack->push(addNode); 
+          _stack->top()->setIsInternalPointer(true);
+          _stack->top()->setPinningArrayPointer(temp->getPinningArrayPointer());
+
+          //if (comp()->getOption(TR_TraceILGen))
+          //    printStack(comp(), _stack, "stack after myOwnAddition");
+          traceMsg(comp(), "\n ============================================================\n");
+      }
       }
 
    push(nodeThatWasNullChecked);
@@ -5873,6 +5974,7 @@ TR_J9ByteCodeIlGenerator::loadFromCallSiteTable(int32_t callSiteIndex)
 void
 TR_J9ByteCodeIlGenerator::loadArrayElement(TR::DataType dataType, TR::ILOpCodes nodeop, bool checks)
    {
+   traceMsg(comp(), "In loadArrayElement\n");
    bool genSpineChecks = comp()->requiresSpineChecks();
 
    _suppressSpineChecks = false;
@@ -6331,7 +6433,7 @@ TR_J9ByteCodeIlGenerator::genNewArray(int32_t typeIndex)
    TR::Node * secondChild=pop();
    TR::Node * firstChild=pop();
    TR::Node * node = TR::Node::createWithSymRef(TR::newarray, 2, 2, firstChild, secondChild, symRefTab()->findOrCreateNewArraySymbolRef(_methodSymbol));
-
+   traceMsg(comp(), "\n Create with Sym Ref\n");
    if (_methodSymbol->skipZeroInitializationOnNewarrays())
      node->setCanSkipZeroInitialization(true);
 
@@ -6429,6 +6531,8 @@ TR_J9ByteCodeIlGenerator::genNewArray(int32_t typeIndex)
       arraysetNode->setArraysetLengthMultipleOfPointerSize(true);
 
       initNode = TR::Node::create(TR::treetop, 1, arraysetNode);
+      //if (comp()->getOption(TR_TraceILGen))
+      //    printStack(comp(), _stack, "stack after initNode\n");
       }
 
    _methodSymbol->setHasNews(true);
@@ -6436,6 +6540,33 @@ TR_J9ByteCodeIlGenerator::genNewArray(int32_t typeIndex)
    if (initNode)
       genTreeTop(initNode);
    push(node);
+   //if (comp()->getOption(TR_TraceILGen))
+   //    printStack(comp(), _stack, "stack after it's all done\n"); 
+
+  /**
+   * Check for the following:
+   *     1. Internal Pointers enabled?
+   *     2. 64 bit?
+   *     3. Number of changes under limit?
+   *     4. Have we imposed a limit (-99 indicates unlimited changes)
+   */ 
+   if (comp()->getOption(TR_DisableInternalPointers) || (!comp()->target().is64Bit() || (_arrayChanges > comp()->getOptions()->getZZArrayModificationCounter() && comp()->getOptions()->getZZArrayModificationCounter() != -99))) {
+       traceMsg(comp(), "\n** Not making any more modifications as _arrayChanges=%d\n", _arrayChanges);
+       genFlush(0);
+       return;
+   }
+
+   /** 
+    * If we find the contiguous-array-view for this array, we 
+    * do not need to create a new one.
+    */
+   if (_memRegionMap.find(node) != _memRegionMap.end()) {
+       genFlush(0);
+       return;
+   }
+ 
+   createContiguousArrayView(node);
+   _arrayChanges++;
    genFlush(0);
    }
 
@@ -6455,6 +6586,31 @@ TR_J9ByteCodeIlGenerator::genANewArray()
    _methodSymbol->setHasNews(true);
    genTreeTop(node);
    push(node);
+
+   /**
+    * Check for the following:
+    *     1. Internal Pointers enabled?
+    *     2. 64 bit?
+    *     3. Number of changes under limit?
+    *     4. Have we imposed a limit (-99 indicates unlimited changes)
+    */ 
+   if (comp()->getOption(TR_DisableInternalPointers) || (!comp()->target().is64Bit() || (_arrayChanges > comp()->getOptions()->getZZArrayModificationCounter() && comp()->getOptions()->getZZArrayModificationCounter() != -99))) {
+       traceMsg(comp(), "\n** Not making any more modifications as _arrayChanges=%d\n", _arrayChanges);
+       genFlush(0);
+       return;
+   }
+
+   /**
+    * If we find the contiguous-array-view for this array, we 
+    * do not need to create a new one.   
+    */
+   if (_memRegionMap.find(node) != _memRegionMap.end()) {
+       genFlush(0);
+       return;
+   }
+
+   createContiguousArrayView(node);
+   _arrayChanges++;
    genFlush(0);
    }
 
@@ -6482,6 +6638,31 @@ TR_J9ByteCodeIlGenerator::genMultiANewArray(int32_t dims)
 
    genTreeTop(node);
    push(node);
+
+   /**
+    * Check for the following:
+    *     1. Internal Pointers enabled?
+    *     2. 64 bit?
+    *     3. Number of changes under limit?
+    *     4. Have we imposed a limit (-99 indicates unlimited changes)
+    */
+   if (comp()->getOption(TR_DisableInternalPointers) || (!comp()->target().is64Bit() || (_arrayChanges > comp()->getOptions()->getZZArrayModificationCounter() && comp()->getOptions()->getZZArrayModificationCounter() != -99))) {
+       traceMsg(comp(), "\n** Not making any more modifications as _arrayChanges=%d\n", _arrayChanges);
+       genFlush(0);
+       return;
+   }
+
+   /**
+    * If we find the contiguous-array-view for this array, we
+    * do not need to create a new one.    
+    */
+   if (_memRegionMap.find(node) != _memRegionMap.end()) {
+       genFlush(0);
+       return;
+   }
+
+   createContiguousArrayView(node);
+   _arrayChanges++;
    }
 
 //----------------------------------------------

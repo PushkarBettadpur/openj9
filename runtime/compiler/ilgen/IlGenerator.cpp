@@ -45,6 +45,8 @@
 
 #define OPT_DETAILS "O^O ILGEN: "
 
+int32_t TR_J9ByteCodeIlGenerator::_arrayChanges = 0;
+
 TR_J9ByteCodeIlGenerator::TR_J9ByteCodeIlGenerator(
    TR::IlGeneratorMethodDetails & methodDetails, TR::ResolvedMethodSymbol * methodSymbol, TR_J9VMBase * fe, TR::Compilation * comp,
    TR::SymbolReferenceTable * symRefTab, bool forceClassLookahead, TR_InlineBlocks *blocksToInline, int32_t argPlaceholderSlot) //TR_ScratchList<TR_InlineBlock> *blocksToInline)
@@ -72,7 +74,8 @@ TR_J9ByteCodeIlGenerator::TR_J9ByteCodeIlGenerator(
      _invokeHandleGenericCalls(NULL),
      _invokeDynamicCalls(NULL),
      _ilGenMacroInvokeExactCalls(NULL),
-     _methodHandleInvokeCalls(NULL)
+     _methodHandleInvokeCalls(NULL),
+     _memRegionMap(std::less<TR::Node *>(), memRegionAllocator(comp->trMemory()->currentStackRegion()))
    {
    static const char *noLookahead = feGetEnv("TR_noLookahead");
    _noLookahead = (noLookahead || comp->getOption(TR_DisableLookahead)) ? true : false;
@@ -186,7 +189,7 @@ TR_J9ByteCodeIlGenerator::genIL()
       }
 
    comp()->setCurrentIlGenerator(0);
-
+ 
    return success;
    }
 
