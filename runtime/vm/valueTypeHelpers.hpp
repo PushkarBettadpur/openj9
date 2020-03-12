@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2001, 2017 IBM Corp. and others
+ * Copyright (c) 2020, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -20,15 +20,33 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
-#include "j9.h"
-#include "j9ddr.h"
+#if !defined(VALUETYPEHELPERS_HPP_)
+#define VALUETYPEHELPERS_HPP_
 
-static const J9DDRStructDefinition structStubs[] = { { 0, 0, 0, 0, 0 } };
+class ValueTypeHelpers {
+	/*
+	 * Data members
+	 */
+private:
 
-const J9DDRStructDefinition *
-getHyPortStructTable(struct OMRPortLibrary *portLib)
-{
-	portLib->tty_printf(portLib, "WARNING: HyPort Structure Table was not generated and has been stubbed out. See ddr.readme.\n");
+protected:
 
-	return structStubs;
-}
+public:
+
+	/*
+	 * Function members
+	 */
+private:
+
+protected:
+
+public:
+	static bool
+	isSubstitutable(J9VMThread *currentThread, j9object_t lhs, j9object_t rhs, UDATA startOffset, J9Class *clazz)
+	{
+		return false;
+	}
+
+};
+
+#endif /* VALUETYPEHELPERS_HPP_ */

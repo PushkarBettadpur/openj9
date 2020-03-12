@@ -67,7 +67,7 @@
 bool firstCompileStarted = false;
 
 // JITSERVER_TODO: disabled to allow for JITServer
-#if !defined(JITSERVER_SUPPORT)
+#if !defined(J9VM_OPT_JITSERVER)
 void *operator new(size_t size)
    {
 #if defined(DEBUG)
@@ -92,7 +92,7 @@ void operator delete(void *)
    {
    TR_ASSERT(0, "Invalid use of global operator delete");
    }
-#endif /* !defined(JITSERVER_SUPPORT) */
+#endif /* !defined(J9VM_OPT_JITSERVER) */
 
 
 
@@ -123,9 +123,9 @@ const char * callingContextNames[] = {
    "LAST_CONTEXT"
 };
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 bool J9::Compilation::_outOfProcessCompilation = false;
-#endif  /* defined(JITSERVER_SUPPORT) */
+#endif  /* defined(J9VM_OPT_JITSERVER) */
 
 J9::Compilation::Compilation(int32_t id,
       J9VMThread *j9vmThread,
@@ -177,10 +177,10 @@ J9::Compilation::Compilation(int32_t id,
    _profileInfo(NULL),
    _skippedJProfilingBlock(false),
    _reloRuntime(reloRuntime),
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    _remoteCompilation(false),
    _serializedRuntimeAssumptions(getTypedAllocator<SerializedRuntimeAssumption>(self()->allocator())),
-#endif /* defined(JITSERVER_SUPPORT) */
+#endif /* defined(J9VM_OPT_JITSERVER) */
    _osrProhibitedOverRangeOfTrees(false)
    {
    _symbolValidationManager = new (self()->region()) TR::SymbolValidationManager(self()->region(), compilee);
@@ -526,6 +526,12 @@ J9::Compilation::isShortRunningMethod(int32_t callerIndex)
 bool
 J9::Compilation::isRecompilationEnabled()
    {
+
+   if (!self()->cg()->getSupportsRecompilation())
+      {
+      return false;
+      }
+
    if (self()->isDLT())
       {
       return false;
@@ -764,14 +770,19 @@ J9::Compilation::freeKnownObjectTable()
    {
    if (_knownObjectTable)
       {
-      TR::VMAccessCriticalSection freeKnownObjectTable(self()->fej9());
+#if defined(J9VM_OPT_JITSERVER)
+      if (!isOutOfProcessCompilation())
+#endif /* defined(J9VM_OPT_JITSERVER) */
+         {
+         TR::VMAccessCriticalSection freeKnownObjectTable(self()->fej9());
 
-      J9VMThread *thread = self()->fej9()->vmThread();
-      TR_ASSERT(thread, "assertion failure");
+         J9VMThread *thread = self()->fej9()->vmThread();
+         TR_ASSERT(thread, "assertion failure");
 
-      TR_ArrayIterator<uintptrj_t> i(&_knownObjectTable->_references);
-      for (uintptrj_t *ref = i.getFirst(); !i.pastEnd(); ref = i.getNext())
-         thread->javaVM->internalVMFunctions->j9jni_deleteLocalRef((JNIEnv*)thread, (jobject)ref);
+         TR_ArrayIterator<uintptr_t> i(&_knownObjectTable->_references);
+         for (uintptr_t *ref = i.getFirst(); !i.pastEnd(); ref = i.getNext())
+            thread->javaVM->internalVMFunctions->j9jni_deleteLocalRef((JNIEnv*)thread, (jobject)ref);
+         }
       }
 
    _knownObjectTable = NULL;
@@ -1374,7 +1385,7 @@ J9::Compilation::notYetRunMeansCold()
 
    TR_ResolvedMethod *currentMethod = self()->getJittedMethodSymbol()->getResolvedMethod();
 
-   intptrj_t initialCount = currentMethod->hasBackwardBranches() ?
+   intptr_t initialCount = currentMethod->hasBackwardBranches() ?
                              self()->getOptions()->getInitialBCount() :
                              self()->getOptions()->getInitialCount();
 

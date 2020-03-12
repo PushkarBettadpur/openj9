@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -49,7 +49,7 @@
 #include "infra/Assert.hpp"
 #include "infra/List.hpp"
 #include "optimizer/PreExistence.hpp"
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 #include "env/j9methodServer.hpp"
 #endif
 
@@ -133,7 +133,7 @@ TR_PatchMultipleNOPedGuardSitesOnStaticFinalFieldModification *TR_PatchMultipleN
    }
 
 TR_PatchJNICallSite *TR_PatchJNICallSite::make(
-   TR_FrontEnd *fe, TR_PersistentMemory * pm, uintptrj_t key, uint8_t *pc, OMR::RuntimeAssumption **sentinel)
+   TR_FrontEnd *fe, TR_PersistentMemory * pm, uintptr_t key, uint8_t *pc, OMR::RuntimeAssumption **sentinel)
    {
    TR_PatchJNICallSite *result = new (pm) TR_PatchJNICallSite(pm, key, pc);
    result->addToRAT(pm, RuntimeAssumptionOnRegisterNative, fe, sentinel);
@@ -157,7 +157,7 @@ TR_PreXRecompileOnMethodOverride *TR_PreXRecompileOnMethodOverride::make(
    }
 
 TR_PatchNOPedGuardSiteOnMutableCallSiteChange *TR_PatchNOPedGuardSiteOnMutableCallSiteChange::make(
-      TR_FrontEnd *fe, TR_PersistentMemory *pm, uintptrj_t key, uint8_t *location, uint8_t *destination, OMR::RuntimeAssumption **sentinel)
+      TR_FrontEnd *fe, TR_PersistentMemory *pm, uintptr_t key, uint8_t *location, uint8_t *destination, OMR::RuntimeAssumption **sentinel)
    {
    TR_PatchNOPedGuardSiteOnMutableCallSiteChange *result = new (pm) TR_PatchNOPedGuardSiteOnMutableCallSiteChange(pm, key, location, destination);
    result->addToRAT(pm, RuntimeAssumptionOnMutableCallSiteChange, fe, sentinel);
@@ -252,7 +252,7 @@ void TR_CHTable::cleanupNewlyExtendedInfo(TR::Compilation *comp)
 //
 bool TR_CHTable::commit(TR::Compilation *comp)
    {
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    if (comp->isOutOfProcessCompilation())
       {
       return true; // Handled in outOfProcessCompilationEnd instead
@@ -558,12 +558,19 @@ TR_CHTable::commitVirtualGuard(TR_VirtualGuard *info, List<TR_VirtualGuardSite> 
       static char *dontInvalidateMCSTargetGuards = feGetEnv("TR_dontInvalidateMCSTargetGuards");
       if (!dontInvalidateMCSTargetGuards)
          {
-         uintptrj_t *mcsReferenceLocation = info->mutableCallSiteObject();
+#if defined(J9VM_OPT_JITSERVER)
+         // JITServer KOT: At the moment this method is called only by TR_CHTable::commit().
+         // TR_CHTable::commit() already checks comp->isOutOfProcessCompilation().
+         // Adding the following check as a precaution in case commitVirtualGuard() is called
+         // outside TR_CHTable::commit() in the future.
+         TR_ASSERT(!comp->isOutOfProcessCompilation(), "TR_CHTable::commitVirtualGuard() should not be called at the server\n");
+#endif /* defined(J9VM_OPT_JITSERVER) */
+         uintptr_t *mcsReferenceLocation = info->mutableCallSiteObject();
          TR::KnownObjectTable *knot = comp->getKnownObjectTable();
          TR_ASSERT(knot, "MutableCallSiteTargetGuard requires the Known Object Table");
          void *cookiePointer = comp->trPersistentMemory()->allocatePersistentMemory(1);
-         uintptrj_t potentialCookie = (uintptrj_t)(uintptr_t)cookiePointer;
-         uintptrj_t cookie = 0;
+         uintptr_t potentialCookie = (uintptr_t)(uintptr_t)cookiePointer;
+         uintptr_t cookie = 0;
 
          TR::KnownObjectTable::Index currentIndex;
 
@@ -572,7 +579,7 @@ TR_CHTable::commitVirtualGuard(TR_VirtualGuard *info, List<TR_VirtualGuardSite> 
             TR::VMAccessCriticalSection invalidateMCSTargetGuards(fej9);
             // TODO: Code duplication with TR_InlinerBase::findInlineTargets
             currentIndex = TR::KnownObjectTable::UNKNOWN;
-            uintptrj_t currentEpoch = fej9->getVolatileReferenceField(*mcsReferenceLocation, "epoch", "Ljava/lang/invoke/MethodHandle;");
+            uintptr_t currentEpoch = fej9->getVolatileReferenceField(*mcsReferenceLocation, "epoch", "Ljava/lang/invoke/MethodHandle;");
             if (currentEpoch)
                currentIndex = knot->getIndex(currentEpoch);
             if (info->mutableCallSiteEpoch() == currentIndex)
@@ -718,7 +725,7 @@ TR_CHTable::commitVirtualGuard(TR_VirtualGuard *info, List<TR_VirtualGuardSite> 
       }
    }
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 VirtualGuardInfoForCHTable getImportantVGuardInfo(TR::Compilation *comp, TR_VirtualGuard *vguard)
    {
    VirtualGuardInfoForCHTable info;

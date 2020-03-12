@@ -49,7 +49,7 @@ TR::SymbolValidationManager::SymbolValidationManager(TR::Region &region, TR_Reso
      _fej9((TR_J9VM *)TR_J9VMBase::get(
         _vmThread->javaVM->jitConfig,
         _vmThread,
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
         TR::CompilationInfo::get()->getPersistentInfo()->getRemoteCompilationMode() == JITServer::SERVER ? TR_J9VMBase::J9_SERVER_VM : 
 #endif
         TR_J9VMBase::DEFAULT_VM)),
@@ -69,7 +69,7 @@ TR::SymbolValidationManager::SymbolValidationManager(TR::Region &region, TR_Reso
    {
    assertionsAreFatal(); // Acknowledge the env var whether or not assertions fail
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    auto stream = TR::CompilationInfo::getStream();
    if (stream && _fej9->sharedCache())
       // because a different VM is used here, a new Shared Cache object was created, so
@@ -162,9 +162,9 @@ TR::SymbolValidationManager::populateWellKnownClasses()
       CHAR_BIT * sizeof (includedClasses) >= WELL_KNOWN_CLASS_COUNT,
       "includedClasses needs >= WELL_KNOWN_CLASS_COUNT bits");
 
-   uintptrj_t classChainOffsets[1 + WELL_KNOWN_CLASS_COUNT] = {0};
-   uintptrj_t *classCount = &classChainOffsets[0];
-   uintptrj_t *nextClassChainOffset = &classChainOffsets[1];
+   uintptr_t classChainOffsets[1 + WELL_KNOWN_CLASS_COUNT] = {0};
+   uintptr_t *classCount = &classChainOffsets[0];
+   uintptr_t *nextClassChainOffset = &classChainOffsets[1];
 
    for (int i = 0; i < WELL_KNOWN_CLASS_COUNT; i++)
       {
@@ -196,7 +196,7 @@ TR::SymbolValidationManager::populateWellKnownClasses()
       includedClasses |= 1 << i;
       _wellKnownClasses.push_back(wkClass);
       *nextClassChainOffset++ =
-         (uintptrj_t)_fej9->sharedCache()->offsetInSharedCacheFromPointer(chain);
+         (uintptr_t)_fej9->sharedCache()->offsetInSharedCacheFromPointer(chain);
       }
 
    *classCount = _wellKnownClasses.size();
@@ -224,7 +224,7 @@ TR::SymbolValidationManager::populateWellKnownClasses()
    }
 
 bool
-TR::SymbolValidationManager::validateWellKnownClasses(const uintptrj_t *wellKnownClassChainOffsets)
+TR::SymbolValidationManager::validateWellKnownClasses(const uintptr_t *wellKnownClassChainOffsets)
    {
    // We may have already run populateWellKnownClasses on this
    // SymbolValidationManager, if there was no delay before processing the
@@ -234,7 +234,7 @@ TR::SymbolValidationManager::validateWellKnownClasses(const uintptrj_t *wellKnow
    for (int i = 1; i <= classCount; i++)
       {
       uintptr_t classChainOffset = wellKnownClassChainOffsets[i];
-      uintptrj_t *classChain = reinterpret_cast<uintptrj_t*>(
+      uintptr_t *classChain = reinterpret_cast<uintptr_t*>(
          _fej9->sharedCache()->pointerFromOffsetInSharedCache(classChainOffset));
       J9ROMClass *romClass = _fej9->sharedCache()->startingROMClassOfClassChain(classChain);
       J9UTF8 * className = J9ROMCLASS_CLASSNAME(romClass);
@@ -1012,7 +1012,7 @@ TR::SymbolValidationManager::validateSymbol(uint16_t methodID, uint16_t defining
    }
 
 bool
-TR::SymbolValidationManager::validateClassByNameRecord(uint16_t classID, uint16_t beholderID, uintptrj_t *classChain)
+TR::SymbolValidationManager::validateClassByNameRecord(uint16_t classID, uint16_t beholderID, uintptr_t *classChain)
    {
    J9Class *beholder = getJ9ClassFromID(beholderID);
    J9ConstantPool *beholderCP = J9_CP_FROM_CLASS(beholder);
@@ -1032,7 +1032,7 @@ TR::SymbolValidationManager::validateProfiledClassRecord(uint16_t classID, void 
    if (classLoader == NULL)
       return false;
 
-   TR_OpaqueClassBlock *clazz = _fej9->sharedCache()->lookupClassFromChainAndLoader(static_cast<uintptrj_t *>(classChainForClassBeingValidated), classLoader);
+   TR_OpaqueClassBlock *clazz = _fej9->sharedCache()->lookupClassFromChainAndLoader(static_cast<uintptr_t *>(classChainForClassBeingValidated), classLoader);
    return validateSymbol(classID, clazz);
    }
 
@@ -1105,7 +1105,7 @@ TR::SymbolValidationManager::validateClassInstanceOfClassRecord(uint16_t classOn
    }
 
 bool
-TR::SymbolValidationManager::validateSystemClassByNameRecord(uint16_t systemClassID, uintptrj_t *classChain)
+TR::SymbolValidationManager::validateSystemClassByNameRecord(uint16_t systemClassID, uintptr_t *classChain)
    {
    J9ROMClass *romClass = _fej9->sharedCache()->startingROMClassOfClassChain(classChain);
    J9UTF8 * className = J9ROMCLASS_CLASSNAME(romClass);
@@ -1180,7 +1180,7 @@ bool
 TR::SymbolValidationManager::validateClassChainRecord(uint16_t classID, void *classChain)
    {
    TR_OpaqueClassBlock *definingClass = getClassFromID(classID);
-   return _fej9->sharedCache()->classMatchesCachedVersion(definingClass, (uintptrj_t *) classChain);
+   return _fej9->sharedCache()->classMatchesCachedVersion(definingClass, (uintptr_t *) classChain);
    }
 
 bool
@@ -1417,7 +1417,7 @@ static void printClass(TR_OpaqueClassBlock *clazz)
       }
    }
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 std::string
 TR::SymbolValidationManager::serializeSymbolToIDMap()
    {
@@ -1450,7 +1450,7 @@ TR::SymbolValidationManager::deserializeSymbolToIDMap(const std::string &symbolT
       _symbolToIdMap.insert(std::make_pair(symbol, id));
       }
    }
-#endif /* defined(JITSERVER_SUPPORT) */
+#endif /* defined(J9VM_OPT_JITSERVER) */
 
 namespace // file-local
    {

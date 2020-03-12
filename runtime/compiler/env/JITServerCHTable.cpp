@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2018, 2019 IBM Corp. and others
+ * Copyright (c) 2018, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -377,21 +377,27 @@ JITClientCommitVirtualGuard(const VirtualGuardInfoForCHTable *info, std::vector<
       static char *dontInvalidateMCSTargetGuards = feGetEnv("TR_dontInvalidateMCSTargetGuards");
       if (!dontInvalidateMCSTargetGuards)
          {
-         uintptrj_t *mcsReferenceLocation = info->_mutableCallSiteObject;
+         uintptr_t *mcsReferenceLocation = info->_mutableCallSiteObject;
          TR::KnownObjectTable *knot = comp->getKnownObjectTable();
          TR_ASSERT(knot, "MutableCallSiteTargetGuard requires the Known Object Table");
          void *cookiePointer = comp->trPersistentMemory()->allocatePersistentMemory(1);
-         uintptrj_t potentialCookie = (uintptrj_t)(uintptr_t)cookiePointer;
-         uintptrj_t cookie = 0;
+         uintptr_t potentialCookie = (uintptr_t)(uintptr_t)cookiePointer;
+         uintptr_t cookie = 0;
 
          TR::KnownObjectTable::Index currentIndex;
 
             {
             TR_J9VMBase *fej9 = (TR_J9VMBase *)(comp->fe());
+            // JITServer KOT:
+            // This method is called by JITClientCHTableCommit() at the client.
+            // Although accessing VM is not an issue, getIndex() could update the KOT
+            // at the client directly and the KOT at the server could be out of sync.
+            // However, JITClientCHTableCommit() is called at the end of compilation,
+            // and therefore it cannot cause any issues.
             TR::VMAccessCriticalSection invalidateMCSTargetGuards(fej9);
             // TODO: Code duplication with TR_InlinerBase::findInlineTargets
             currentIndex = TR::KnownObjectTable::UNKNOWN;
-            uintptrj_t currentEpoch = fej9->getVolatileReferenceField(*mcsReferenceLocation, "epoch", "Ljava/lang/invoke/MethodHandle;");
+            uintptr_t currentEpoch = fej9->getVolatileReferenceField(*mcsReferenceLocation, "epoch", "Ljava/lang/invoke/MethodHandle;");
             if (currentEpoch)
                currentIndex = knot->getIndex(currentEpoch);
             if (info->_mutableCallSiteEpoch == currentIndex)

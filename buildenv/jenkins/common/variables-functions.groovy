@@ -326,7 +326,7 @@ def set_repos_variables(BUILD_SPECS=null) {
 * Initializes OpenJDK repository URL, branch, SHA for given release and returns
 * them as a map.
 * Build parameters take precedence over custom variables (see variables file).
-* Throws an error if repository URL or branch are not provided. 
+* Throws an error if repository URL or branch are not provided.
 */
 def get_openjdk_info(SDK_VERSION, SPECS, MULTI_RELEASE) {
     // map to store git repository information by spec
@@ -398,9 +398,9 @@ def get_openjdk_info(SDK_VERSION, SPECS, MULTI_RELEASE) {
 
 /*
 * Initializes the OpenJ9 and OMR repositories variables with values from
-* the variables file if they are not set as build parameters. 
+* the variables file if they are not set as build parameters.
 * If no values available in the variable file then initialize these variables
-* with default values, otherwise set them to empty strings (to avoid 
+* with default values, otherwise set them to empty strings (to avoid
 * downstream builds errors - Jenkins build parameters should not be null).
 */
 def set_extensions_variables(defaults=null) {
@@ -622,9 +622,11 @@ def set_sdk_variables() {
     SDK_FILENAME = "OpenJ9-JDK${SDK_VERSION}-${SPEC}-${DATESTAMP}.tar.gz"
     TEST_FILENAME = "test-images.tar.gz"
     JAVADOC_FILENAME = "OpenJ9-JDK${SDK_VERSION}-Javadoc-${SPEC}-${DATESTAMP}.tar.gz"
+    DEBUG_IMAGE_FILENAME = "debug-image.tar.gz"
     echo "Using SDK_FILENAME = ${SDK_FILENAME}"
     echo "Using TEST_FILENAME = ${TEST_FILENAME}"
     echo "Using JAVADOC_FILENAME = ${JAVADOC_FILENAME}"
+    echo "Using DEBUG_IMAGE_FILENAME = ${DEBUG_IMAGE_FILENAME}"
     DIAGNOSTICS_FILENAME = "${JOB_NAME}-${BUILD_NUMBER}-${DATESTAMP}-diagnostics.tar.gz"
 }
 
@@ -771,6 +773,29 @@ def add_pr_to_description() {
     }
 }
 
+def setup() {
+    set_job_variables(params.JOB_TYPE)
+
+    switch (params.JOB_TYPE) {
+        case "pipeline":
+            // pipelineFunctions already loads pipeline-functions, so in this case let's just dup the variable buildFile
+            // TODO revisit all the loads and try to optimize.
+            buildFile = pipelineFunctions
+            SHAS = buildFile.get_shas(OPENJDK_REPO, OPENJDK_BRANCH, OPENJ9_REPO, OPENJ9_BRANCH, OMR_REPO, OMR_BRANCH, VENDOR_TEST_REPOS_MAP, VENDOR_TEST_BRANCHES_MAP, VENDOR_TEST_SHAS_MAP)
+            BUILD_NAME = buildFile.get_build_job_name(SPEC, SDK_VERSION, BUILD_IDENTIFIER)
+            // Stash DSL file so we can quickly load it on master
+            if (params.AUTOMATIC_GENERATION != 'false'){
+                stash includes: 'buildenv/jenkins/jobs/pipelines/Pipeline_Template.groovy', name: 'DSL'
+            }
+            break
+        case "build":
+            buildFile = load 'buildenv/jenkins/common/build.groovy'
+            break
+        default:
+            error("Unknown Jenkins job type:'${params.JOB_TYPE}'")
+    }
+}
+
 /*
 * Initializes all of the required variables for a Jenkins job by given job type.
 */
@@ -810,6 +835,7 @@ def set_job_variables(job_type) {
             add_pr_to_description()
             break
         case "pipeline":
+            currentBuild.description = "<a href=\"${RUN_DISPLAY_URL}\">Blue Ocean</a>"
             // set variables for a pipeline job
             set_repos_variables()
             set_adoptopenjdk_tests_repository()
@@ -1261,10 +1287,12 @@ def create_job(JOB_NAME, SDK_VERSION, SPEC, downstreamJobType, id){
     params.put('VENDOR_CREDENTIALS_ID_DEFAULT', VENDOR_CREDENTIALS_ID_DEFAULT)
     params.put('jobType', downstreamJobType)
     params.put('DISCARDER_NUM_BUILDS', DISCARDER_NUM_BUILDS)
+    params.put('SCM_REPO', SCM_REPO)
+    params.put('SCM_BRANCH', SCM_BRANCH)
 
     def templatePath = 'buildenv/jenkins/jobs/pipelines/Pipeline_Template.groovy'
     pipelineFunctions.retry_and_delay({
-        jobDsl targets: templatePath, ignoreExisting: false, additionalParameters: params}, 
+        jobDsl targets: templatePath, ignoreExisting: false, additionalParameters: params},
         3, 120)
 }
 

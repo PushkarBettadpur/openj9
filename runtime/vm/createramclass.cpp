@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2019 IBM Corp. and others
+ * Copyright (c) 1991, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -2531,6 +2531,8 @@ fail:
 			ramClass->romClass = romClass;
 			ramClass->eyecatcher = 0x99669966;
 			ramClass->module = NULL;
+			ramClass->reservedCounter = 0;
+			ramClass->cancelCounter = 0;
 
 			/* hostClass is exclusively defined only in Unsafe.defineAnonymousClass.
 			 * For all other cases, clazz->hostClass points to itself (clazz).
@@ -2892,12 +2894,19 @@ fail:
 				} else {
 					arity = 1;
 					leafComponentType = elementClass;
+					/* For arrays of valueType elements (where componentType is a valuetype), the arrays themselves are not
+					 * valuetypes but they should inherit the layout characteristics (ie. flattenable, etc.)
+					 * of the valuetype elements. A 2D (or more) array of valuetype elements (where leafComponentType is a Valuetype but
+					 * componentType is not) is not direct array array of valuetype elements, therefore it should not inherit any layout
+					 * properties from the leafComponentType. A 2D array is an array of references so it can never be flattened, however, its
+					 * elements may be flattened arrays.
+					 */
+					ramArrayClass->classFlags |= (elementClass->classFlags & (J9ClassIsFlattened | J9ClassLargestAlignmentConstraintReference | J9ClassLargestAlignmentConstraintDouble));
 				}
 				ramArrayClass->leafComponentType = leafComponentType;
 				ramArrayClass->arity = arity;
 				ramArrayClass->componentType = elementClass;
 				ramArrayClass->module = leafComponentType->module;
-				ramArrayClass->classFlags |= ((J9ClassIsValueType | J9ClassIsFlattened) & elementClass->classFlags);
 
 				if (J9_IS_J9CLASS_FLATTENED(elementClass)) {
 					if (J9_ARE_ALL_BITS_SET(elementClass->classFlags, J9ClassLargestAlignmentConstraintDouble)) {

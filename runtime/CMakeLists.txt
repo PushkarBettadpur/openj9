@@ -105,9 +105,6 @@ include(cmake/omr_config.cmake)
 if(OPENJ9_BUILD)
 	add_definitions(-DOPENJ9_BUILD)
 endif()
-if (JITSERVER_SUPPORT)
-	add_definitions(-DJITSERVER_SUPPORT)
-endif()
 
 # clean up the variables we used
 set(versionStr)
@@ -287,6 +284,7 @@ add_dependencies(j9vm_interface
 	j9vm_hookgen
 	j9vm_m4gen
 	j9vm_nlsgen
+	run_tracegen
 )
 
 # j9vm_gc_includes is used to track the include directories that are consumed by the various gc components
@@ -413,7 +411,6 @@ endif()
 if(J9VM_MODULE_CFDUMPER)
 	add_subdirectory(cfdumper)
 endif()
-add_subdirectory(clear_vmi)
 if(J9VM_MODULE_CODERT_VM)
 	add_subdirectory(codert_vm)
 endif()
@@ -496,10 +493,6 @@ endif()
 if(J9VM_MODULE_GCCHK)
 	add_subdirectory(gcchk)
 endif()
-if(J9VM_OPT_HARMONY)
-	add_subdirectory(harmony)
-	add_subdirectory(hyvm)
-endif()
 if(J9VM_MODULE_HOOKABLE)
 	add_subdirectory(hookable)
 endif()
@@ -557,7 +550,7 @@ endif()
 if(J9VM_MODULE_STACKMAP)
 	add_subdirectory(stackmap)
 endif()
-if(J9VM_OPT_SIDECAR OR J9VM_OPT_HARMONY)
+if(J9VM_OPT_SIDECAR)
 	add_subdirectory(sunvmi)
 endif()
 if(J9VM_MODULE_THREAD)
@@ -595,6 +588,6 @@ endif()
 # NOTE this is not conditional in the UMA module.xml
 add_subdirectory(tests)
 
-if (JITSERVER_SUPPORT)
+if (J9VM_OPT_JITSERVER)
 	add_subdirectory(jitserver_launcher)
 endif()

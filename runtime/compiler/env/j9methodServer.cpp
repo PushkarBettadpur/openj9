@@ -152,6 +152,30 @@ TR_ResolvedJ9JITServerMethod::staticAttributes(TR::Compilation * comp, I_32 cpIn
    return result;
    }
 
+TR_OpaqueClassBlock * 
+TR_ResolvedJ9JITServerMethod::definingClassFromCPFieldRef(TR::Compilation *comp, int32_t cpIndex, bool isStatic)
+   {
+   TR::CompilationInfoPerThread *compInfoPT = _fe->_compInfoPT;
+      {
+      OMR::CriticalSection getRemoteROMClass(compInfoPT->getClientData()->getROMMapMonitor());
+      auto &cache = getJ9ClassInfo(compInfoPT, _ramClass)._fieldOrStaticDefiningClassCache;
+      auto it = cache.find(cpIndex);
+      if (it != cache.end())
+         return it->second;
+      }
+   _stream->write(JITServer::MessageType::ResolvedMethod_definingClassFromCPFieldRef, _remoteMirror, cpIndex, isStatic);
+   TR_OpaqueClassBlock *resolvedClass = std::get<0>(_stream->read<TR_OpaqueClassBlock *>());
+   // Do not cache if the class is unresolved, because it may become resolved later on
+   if (resolvedClass)
+      {
+      OMR::CriticalSection getRemoteROMClass(compInfoPT->getClientData()->getROMMapMonitor());
+      auto &cache = getJ9ClassInfo(compInfoPT, _ramClass)._fieldOrStaticDefiningClassCache;
+      cache.insert({cpIndex, resolvedClass});
+      }
+   
+   return resolvedClass;
+   }
+
 TR_OpaqueClassBlock *
 TR_ResolvedJ9JITServerMethod::getClassFromConstantPool(TR::Compilation * comp, uint32_t cpIndex, bool returnClassForAOT)
    {
@@ -268,14 +292,14 @@ TR_ResolvedJ9JITServerMethod::isUnresolvedConstantDynamic(I_32 cpIndex)
    }
 
 void *
-TR_ResolvedJ9JITServerMethod::dynamicConstant(I_32 cpIndex, uintptrj_t *obj)
+TR_ResolvedJ9JITServerMethod::dynamicConstant(I_32 cpIndex, uintptr_t *obj)
    {
    TR_ASSERT_FATAL(cpIndex != -1, "ConstantDynamic cpIndex shouldn't be -1");
 
    _stream->write(JITServer::MessageType::ResolvedMethod_dynamicConstant, _remoteMirror, cpIndex);
 
-   auto recv = _stream->read<uintptrj_t *, uintptrj_t>();
-   uintptrj_t *objLocation = std::get<0>(recv);
+   auto recv = _stream->read<uintptr_t *, uintptr_t>();
+   uintptr_t *objLocation = std::get<0>(recv);
    if (obj)
       {
       *obj = std::get<1>(recv);
@@ -1362,8 +1386,8 @@ TR_ResolvedJ9JITServerMethod::isSameMethod(TR_ResolvedMethod * m2)
       if (!other->asJ9Method()->isArchetypeSpecimen())
          return false;
 
-      uintptrj_t *thisHandleLocation  = getMethodHandleLocation();
-      uintptrj_t *otherHandleLocation = other->getMethodHandleLocation();
+      uintptr_t *thisHandleLocation  = getMethodHandleLocation();
+      uintptr_t *otherHandleLocation = other->getMethodHandleLocation();
 
       // If these are not MethodHandle thunk archetypes, then we're not sure
       // how to compare them.  Conservatively return false in that case.
@@ -1450,7 +1474,7 @@ TR_ResolvedJ9JITServerMethod::classOfMethod()
       if (isNewInstanceImplThunk())
          {
          TR_ASSERT(_j9classForNewInstance, "Must have the class for the newInstance");
-         //J9Class * clazz = (J9Class *)((intptrj_t)ramMethod()->extra & ~J9_STARTPC_NOT_TRANSLATED);
+         //J9Class * clazz = (J9Class *)((intptr_t)ramMethod()->extra & ~J9_STARTPC_NOT_TRANSLATED);
          return _fe->convertClassPtrToClassOffset(_j9classForNewInstance);//(TR_OpaqueClassBlock *&)(rc);
          }
       return _fe->convertClassPtrToClassOffset(_ramClass);
@@ -1500,7 +1524,7 @@ TR_ResolvedJ9JITServerMethod::getCallerWeight(TR_ResolvedJ9Method *caller, uint3
    if (!iProfiler)
       return false;
 
-   uintptrj_t pcAddress = iProfiler->getSearchPCFromMethodAndBCIndex(callerMethod, pcIndex, 0);
+   uintptr_t pcAddress = iProfiler->getSearchPCFromMethodAndBCIndex(callerMethod, pcIndex, 0);
 
    TR_IPMethodHashTableEntry *entry = _iProfilerMethodEntry;
 
@@ -1511,7 +1535,7 @@ TR_ResolvedJ9JITServerMethod::getCallerWeight(TR_ResolvedJ9Method *caller, uint3
       }
    for (TR_IPMethodData* it = &entry->_caller; it; it = it->next)
       {
-      if( it->getMethod() == callerMethod && (!useTuples || ((((uintptrj_t) it->getPCIndex()) + TR::Compiler->mtd.bytecodeStart(callerMethod)) == pcAddress)))
+      if( it->getMethod() == callerMethod && (!useTuples || ((((uintptr_t) it->getPCIndex()) + TR::Compiler->mtd.bytecodeStart(callerMethod)) == pcAddress)))
          {
          *weight = it->getWeight();
          return true;
@@ -2267,6 +2291,24 @@ void *
 TR_ResolvedRelocatableJ9JITServerMethod::startAddressForInterpreterOfJittedMethod()
    {
    return ((J9Method *)getNonPersistentIdentifier())->extra;
+   }
+
+TR_OpaqueClassBlock * 
+TR_ResolvedRelocatableJ9JITServerMethod::definingClassFromCPFieldRef(TR::Compilation *comp, int32_t cpIndex, bool isStatic)
+   {
+   TR_OpaqueClassBlock *resolvedClass = TR_ResolvedJ9JITServerMethod::definingClassFromCPFieldRef(comp, cpIndex, isStatic);
+   if (resolvedClass)
+      {
+      bool valid = false;
+      if (comp->getOption(TR_UseSymbolValidationManager))
+         valid = comp->getSymbolValidationManager()->addDefiningClassFromCPRecord(resolvedClass, cp(), cpIndex, isStatic);
+      else
+         valid = storeValidationRecordIfNecessary(comp, cp(), cpIndex, isStatic ? TR_ValidateStaticField : TR_ValidateInstanceField, ramMethod());
+
+      if (!valid)
+         resolvedClass = NULL;
+      }
+   return resolvedClass;
    }
 
 TR_OpaqueClassBlock *

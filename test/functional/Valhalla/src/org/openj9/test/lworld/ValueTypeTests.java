@@ -615,6 +615,7 @@ public class ValueTypeTests {
 		int x = 0;
 		int y = 0;
 		Object valueType = makePoint2D.invoke(x, y);
+		Object valueTypeArray = Array.newInstance(flattenedLine2DClass, genericArraySize);
 
 		String fields[] = {"longField:J"};
 		Class<?> testMonitorEnterOnValueType = ValueTypeGenerator.generateRefClass("TestMonitorEnterOnValueType", fields);
@@ -623,6 +624,12 @@ public class ValueTypeTests {
 			monitorEnterOnValueType.invoke(valueType);
 			Assert.fail("should throw exception. MonitorEnter cannot be used with ValueType");
 		} catch (IllegalMonitorStateException e) {}
+		
+		try {
+			monitorEnterOnValueType.invoke(valueTypeArray);
+		} catch (IllegalMonitorStateException e) {
+			Assert.fail("Should not throw exception. MonitorEnter can be used with ValueType arrays");
+		}
 	}
 
 	/*
@@ -637,14 +644,24 @@ public class ValueTypeTests {
 		int x = 1;
 		int y = 1;
 		Object valueType = makePoint2D.invoke(x, y);
+		Object valueTypeArray = Array.newInstance(flattenedLine2DClass, genericArraySize);
 
 		String fields[] = {"longField:J"};
 		Class<?> testMonitorExitOnValueType = ValueTypeGenerator.generateRefClass("TestMonitorExitOnValueType", fields);
+		MethodHandle monitorEnterOnValueType = lookup.findStatic(testMonitorExitOnValueType, "testMonitorEnterOnObject", MethodType.methodType(void.class, Object.class));
 		MethodHandle monitorExitOnValueType = lookup.findStatic(testMonitorExitOnValueType, "testMonitorExitOnObject", MethodType.methodType(void.class, Object.class));
 		try {
+			monitorEnterOnValueType.invoke(valueType);
 			monitorExitOnValueType.invoke(valueType);
 			Assert.fail("should throw exception. MonitorExit cannot be used with ValueType");
 		} catch (IllegalMonitorStateException e) {}
+		
+		try {
+			monitorEnterOnValueType.invoke(valueTypeArray);
+			monitorExitOnValueType.invoke(valueTypeArray);
+		} catch (IllegalMonitorStateException e) {
+			Assert.fail("Should not throw exception. MonitorExit can be used with ValueType arrays");
+		}
 	}
 
 	/*
@@ -1454,6 +1471,26 @@ public class ValueTypeTests {
 	}
 
 	/*
+	 * Create a 2D array of valueTypes, verify that the default elements are null. 
+	 */
+	@Test(priority=5)
+	static public void testMultiDimentionalArrays() throws Throwable {
+		Class assortedValueWithLongAlignment2DClass = Array.newInstance(assortedValueWithLongAlignmentClass, 1).getClass();
+		Class assortedValueWithSingleAlignment2DClass = Array.newInstance(assortedValueWithSingleAlignmentClass, 1).getClass();
+		
+		Object assortedRefWithLongAlignment2DArray = Array.newInstance(assortedValueWithLongAlignment2DClass, genericArraySize);
+		Object assortedRefWithSingleAlignment2DArray = Array.newInstance(assortedValueWithSingleAlignment2DClass, genericArraySize);
+		
+		for (int i = 0; i < genericArraySize; i++) {
+			Object ref = Array.get(assortedRefWithLongAlignment2DArray, i);
+			assertNull(ref);
+			
+			ref = Array.get(assortedRefWithSingleAlignment2DArray, i);
+			assertNull(ref);
+		}
+	}
+	
+	/*
 	 * Create an assortedRefWithLongAlignment Array
 	 * Since it's ref type, the array should be filled with nullptrs
 	 */
@@ -1580,6 +1617,36 @@ public class ValueTypeTests {
 		}
 	}
 
+	@Test(priority=1)
+	static public void testFlattenedFieldInitSequence() throws Throwable {
+		String fields[] = {"x:I", "y:I"};
+		Class nestAClass = ValueTypeGenerator.generateValueClass("NestedA", fields);
+		
+		String fields2[] = {"a:QNestedA;", "b:QNestedA;"};
+		Class nestBClass = ValueTypeGenerator.generateValueClass("NestedB", fields2);
+		
+		String fields3[] = {"c:QNestedB;", "d:QNestedB;"};
+		Class containerCClass = ValueTypeGenerator.generateValueClass("ContainerC", fields3);
+		
+		MethodHandle defaultValueContainerC = lookup.findStatic(containerCClass, "makeValueTypeDefaultValue", MethodType.methodType(containerCClass));
+		
+		Object containerC = defaultValueContainerC.invoke();
+		
+		MethodHandle getC = generateGenericGetter(containerCClass, "c");
+		MethodHandle getD = generateGenericGetter(containerCClass, "d");
+		MethodHandle getA = generateGenericGetter(nestBClass, "a");
+		MethodHandle getB = generateGenericGetter(nestBClass, "b");
+		
+		assertNotNull(getC.invoke(containerC));
+		assertNotNull(getA.invoke(getC.invoke(containerC)));
+		assertNotNull(getB.invoke(getC.invoke(containerC)));
+		
+		assertNotNull(getD.invoke(containerC));
+		assertNotNull(getA.invoke(getD.invoke(containerC)));
+		assertNotNull(getB.invoke(getD.invoke(containerC)));
+	}
+	
+	
 	static MethodHandle generateGetter(Class<?> clazz, String fieldName, Class<?> fieldType) {
 		try {
 			return lookup.findVirtual(clazz, "get"+fieldName, MethodType.methodType(fieldType));

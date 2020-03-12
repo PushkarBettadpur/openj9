@@ -150,16 +150,16 @@ uint32_t J9::ARM64::PrivateLinkage::getRightToLeft()
    return getProperties().getRightToLeft();
    }
 
-intptrj_t
+intptr_t
 J9::ARM64::PrivateLinkage::entryPointFromCompiledMethod()
    {
-   return reinterpret_cast<intptrj_t>(getJittedMethodEntryPoint()->getBinaryEncoding());
+   return reinterpret_cast<intptr_t>(getJittedMethodEntryPoint()->getBinaryEncoding());
    }
 
-intptrj_t
+intptr_t
 J9::ARM64::PrivateLinkage::entryPointFromInterpretedMethod()
    {
-   return reinterpret_cast<intptrj_t>(getInterpretedMethodEntryPoint()->getBinaryEncoding());
+   return reinterpret_cast<intptr_t>(getInterpretedMethodEntryPoint()->getBinaryEncoding());
    }
 
 void J9::ARM64::PrivateLinkage::mapStack(TR::ResolvedMethodSymbol *method)
@@ -731,8 +731,8 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
    int32_t argIndex = 0;
    int32_t numMemArgs = 0;
    int32_t memArgSize = 0;
-   int32_t memArgOffset;
    int32_t from, to, step;
+   int32_t argSize = -properties.getOffsetToFirstParm();
    int32_t totalSize = 0;
    int32_t multiplier;
 
@@ -841,8 +841,6 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
    if (numMemArgs > 0)
       {
       pushToMemory = new (trStackMemory()) TR::ARM64MemoryArgument[numMemArgs];
-
-      memArgOffset = rightToLeft ? 0 : memArgSize;
       }
 
    if (specialArgReg)
@@ -900,6 +898,7 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
                }
             else
                {
+               argSize += TR::Compiler->om.sizeofReferenceAddress() * ((childType == TR::Int64) ? 2 : 1);
                if (numIntegerArgs < numIntArgRegs)
                   {
                   if (!cg()->canClobberNodesRegister(child, 0))
@@ -930,16 +929,7 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
                else // numIntegerArgs >= numIntArgRegs
                   {
                   op = ((childType == TR::Address) || (childType == TR::Int64)) ? TR::InstOpCode::strimmx : TR::InstOpCode::strimmw;
-                  multiplier = (childType == TR::Int64) ? 2 : 1;
-                  if (!rightToLeft)
-                     {
-                     memArgOffset -= TR::Compiler->om.sizeofReferenceAddress() * multiplier;
-                     }
-                  pushOutgoingMemArgument(argRegister, memArgOffset, op, pushToMemory[argIndex++]);
-                  if (rightToLeft)
-                     {
-                     memArgOffset += TR::Compiler->om.sizeofReferenceAddress() * multiplier;
-                     }
+                  pushOutgoingMemArgument(argRegister, totalSize - argSize, op, pushToMemory[argIndex++]);
                   }
                numIntegerArgs++;
                }
@@ -948,10 +938,12 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
          case TR::Double:
             if (childType == TR::Float)
                {
+               argSize += TR::Compiler->om.sizeofReferenceAddress();
                argRegister = pushFloatArg(child);
                }
             else
                {
+               argSize += TR::Compiler->om.sizeofReferenceAddress() * 2;
                argRegister = pushDoubleArg(child);
                }
             if (numFloatArgs < numFloatArgRegs)
@@ -979,16 +971,7 @@ int32_t J9::ARM64::PrivateLinkage::buildPrivateLinkageArgs(TR::Node *callNode,
             else // numFloatArgs >= numFloatArgRegs
                {
                op = (childType == TR::Float) ? TR::InstOpCode::vstrimms : TR::InstOpCode::vstrimmd;
-               multiplier = (childType == TR::Double) ? 2 : 1;
-               if (!rightToLeft)
-                  {
-                  memArgOffset -= TR::Compiler->om.sizeofReferenceAddress() * multiplier;
-                  }
-               pushOutgoingMemArgument(argRegister, memArgOffset, op, pushToMemory[argIndex++]);
-               if (rightToLeft)
-                  {
-                  memArgOffset += TR::Compiler->om.sizeofReferenceAddress() * multiplier;
-                  }
+               pushOutgoingMemArgument(argRegister, totalSize - argSize, op, pushToMemory[argIndex++]);
                }
             numFloatArgs++;
             break;
@@ -1282,13 +1265,19 @@ void J9::ARM64::PrivateLinkage::buildVirtualDispatch(TR::Node *callNode,
       // ToDo: Inline interface dispatch
       doneLabel = generateLabelSymbol(cg());
 
+      /**
+       * The vft child is not used by this interface dispatch, but its reference
+       * count must be decremented as if it were.
+       */
+      cg()->recursivelyDecReferenceCount(callNode->getFirstChild());
+
       TR::LabelSymbol *ifcSnippetLabel = generateLabelSymbol(cg());
       TR::ARM64InterfaceCallSnippet *ifcSnippet =
          new (trHeapMemory())
          TR::ARM64InterfaceCallSnippet(cg(), callNode, ifcSnippetLabel, argSize, doneLabel, (uint8_t *)thunk);
       cg()->addSnippet(ifcSnippet);
 
-      gcPoint = generateLabelInstruction(cg(), TR::InstOpCode::b, callNode, ifcSnippetLabel, dependencies);
+      gcPoint = generateLabelInstruction(cg(), TR::InstOpCode::b, callNode, ifcSnippetLabel);
       }
 
    gcPoint->ARM64NeedsGCMap(cg(), regMapForGC);
@@ -1487,8 +1476,8 @@ void J9::ARM64::PrivateLinkage::performPostBinaryEncoding()
    TR::ARM64ImmInstruction *linkageInfoWordInstruction = cg()->getReturnTypeInfoInstruction();
    uint32_t linkageInfoWord = linkageInfoWordInstruction->getSourceImmediate();
 
-   intptrj_t jittedMethodEntryAddress = reinterpret_cast<intptrj_t>(getJittedMethodEntryPoint()->getBinaryEncoding());
-   intptrj_t interpretedMethodEntryAddress = reinterpret_cast<intptrj_t>(getInterpretedMethodEntryPoint()->getBinaryEncoding());
+   intptr_t jittedMethodEntryAddress = reinterpret_cast<intptr_t>(getJittedMethodEntryPoint()->getBinaryEncoding());
+   intptr_t interpretedMethodEntryAddress = reinterpret_cast<intptr_t>(getInterpretedMethodEntryPoint()->getBinaryEncoding());
 
    linkageInfoWord = (static_cast<uint32_t>(jittedMethodEntryAddress - interpretedMethodEntryAddress) << 16) | linkageInfoWord;
    linkageInfoWordInstruction->setSourceImmediate(linkageInfoWord);

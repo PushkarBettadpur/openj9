@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -38,9 +38,9 @@
 #include "j9cfg.h"
 #include "jilconsts.h"
 #include "vmaccess.h"
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 #include "runtime/JITClientSession.hpp"
-#endif /* defined(JITSERVER_SUPPORT) */
+#endif /* defined(J9VM_OPT_JITSERVER) */
 
 int64_t
 J9::VMEnv::maxHeapSizeInBytes()
@@ -324,7 +324,7 @@ J9::VMEnv::releaseAccess(TR_J9VMBase *fej9)
       }
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetPendingExceptionOffset()
    {
    return offsetof(J9VMThread, jitException);
@@ -403,7 +403,7 @@ J9::VMEnv::canMethodExitEventBeHooked(TR::Compilation *comp)
    return comp->fej9()->canMethodExitEventBeHooked();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::getOverflowSafeAllocSize(TR::Compilation *comp)
    {
    return comp->fej9()->getOverflowSafeAllocSize();
@@ -417,14 +417,14 @@ J9::VMEnv::cpuTimeSpentInCompilationThread(TR::Compilation *comp)
    }
 
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::OSRFrameHeaderSizeInBytes(TR::Compilation *comp)
    {
    return comp->fej9()->getOSRFrameHeaderSizeInBytes();
    }
 
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::OSRFrameSizeInBytes(TR::Compilation *comp, TR_OpaqueMethodBlock* method)
    {
    return comp->fej9()->getOSRFrameSizeInBytes(method);
@@ -432,48 +432,48 @@ J9::VMEnv::OSRFrameSizeInBytes(TR::Compilation *comp, TR_OpaqueMethodBlock* meth
 
 
 bool
-J9::VMEnv::ensureOSRBufferSize(TR::Compilation *comp, uintptrj_t osrFrameSizeInBytes, uintptrj_t osrScratchBufferSizeInBytes, uintptrj_t osrStackFrameSizeInBytes)
+J9::VMEnv::ensureOSRBufferSize(TR::Compilation *comp, uintptr_t osrFrameSizeInBytes, uintptr_t osrScratchBufferSizeInBytes, uintptr_t osrStackFrameSizeInBytes)
    {
    return comp->fej9()->ensureOSRBufferSize(osrFrameSizeInBytes, osrScratchBufferSizeInBytes, osrStackFrameSizeInBytes);
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetOSRReturnAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetOSRReturnAddressOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetGSIntermediateResultOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetGSIntermediateResultOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetConcurrentScavengeActiveByteAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetConcurrentScavengeActiveByteAddressOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetEvacuateBaseAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetEvacuateBaseAddressOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetEvacuateTopAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetEvacuateTopAddressOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetGSOperandAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetGSOperandAddressOffset();
    }
 
-uintptrj_t
+uintptr_t
 J9::VMEnv::thisThreadGetGSHandlerAddressOffset(TR::Compilation *comp)
    {
    return comp->fej9()->thisThreadGetGSHandlerAddressOffset();
@@ -491,12 +491,12 @@ J9::VMEnv::isSelectiveMethodEnterExitEnabled(TR::Compilation *comp)
 size_t
 J9::VMEnv::getInterpreterVTableOffset()
    {
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    if (auto stream = TR::CompilationInfo::getStream())
       {
       auto *vmInfo = TR::compInfoPT->getClientData()->getOrCacheVMInfo(stream);
       return vmInfo->_interpreterVTableOffset;
       }
-#endif /* defined(JITSERVER_SUPPORT) */
+#endif /* defined(J9VM_OPT_JITSERVER) */
    return sizeof(J9Class);
    }

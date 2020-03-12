@@ -85,6 +85,7 @@ CURRENT_RELEASES = ['8', '11', '14', 'next']
 
 SPECS = ['ppc64_aix'      : CURRENT_RELEASES,
          'ppc64le_linux'  : CURRENT_RELEASES,
+         'ppc64le_linux_cm' : ['8', '11'],
          'ppc64le_linux_jit' : ['8', '11'],
          'ppc64le_linux_xl' : CURRENT_RELEASES,
          's390x_linux'    : CURRENT_RELEASES,
@@ -112,6 +113,8 @@ SHORT_NAMES = ['all' : ['ppc64le_linux','ppc64le_linux_xl','s390x_linux','s390x_
             'zlinuxlargeheap' : ['s390x_linux_xl'],
             'zlinuxxl' : ['s390x_linux_xl'],
             'plinux' : ['ppc64le_linux'],
+            'plinuxcmake' : ['ppc64le_linux_cm'],
+            'plinuxcm' : ['ppc64le_linux_cm'],
             'plinuxjit' : ['ppc64le_linux_jit'],
             'plinuxlargeheap' : ['ppc64le_linux_xl'],
             'plinuxxl' : ['ppc64le_linux_xl'],
@@ -213,6 +216,7 @@ BUILD_SPECS = [:]
 builds = [:]
 pipelineNames = []
 pipelinesStatus = [:]
+buildFile = ''
 
 try {
     timeout(time: TIMEOUT_TIME.toInteger(), unit: TIMEOUT_UNIT) {
@@ -474,6 +478,10 @@ def get_pipeline_name(spec, version) {
 */
 def get_summary_table(identifier) {
     // fetch the downstream builds of the current build
+    if (!buildFile) {
+        echo 'buildFile not loaded. Cannot create summary table.'
+        return ''
+    }
     def pipelineBuilds = buildFile.get_downstream_builds(currentBuild, currentBuild.projectName, pipelineNames)
     if (pipelineBuilds.isEmpty()) {
         return ''

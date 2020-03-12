@@ -1718,12 +1718,12 @@ TR_J9ByteCodeIlGenerator::valueMayBeModified(TR::Node * sideEffect, TR::Node * n
 
 
 TR::Node *
-TR_J9ByteCodeIlGenerator::loadConstantValueIfPossible(TR::Node *topNode, uintptrj_t topFieldOffset,  TR::DataType type, bool isArrayLength)
+TR_J9ByteCodeIlGenerator::loadConstantValueIfPossible(TR::Node *topNode, uintptr_t topFieldOffset,  TR::DataType type, bool isArrayLength)
    {
    TR::Node *constNode = NULL;
    TR::Node *parent = topNode;
    TR::SymbolReference *symRef = NULL;
-   uintptrj_t fieldOffset = 0;
+   uintptr_t fieldOffset = 0;
    if (topNode->getOpCode().hasSymbolReference())
       {
       symRef = topNode->getSymbolReference();
@@ -1794,7 +1794,7 @@ TR_J9ByteCodeIlGenerator::loadConstantValueIfPossible(TR::Node *topNode, uintptr
 
          if (loadConstantValueCriticalSection.hasVMAccess())
             {
-            uintptrj_t objectPointer = comp()->fej9()->getStaticReferenceFieldAtAddress((uintptrj_t)symbol->getStaticAddress());
+            uintptr_t objectPointer = comp()->fej9()->getStaticReferenceFieldAtAddress((uintptr_t)symbol->getStaticAddress());
             if (objectPointer)
                {
                switch (symbol->getDataType())
@@ -3216,7 +3216,7 @@ TR_J9ByteCodeIlGenerator::genInvokeDynamic(int32_t callSiteIndex)
    TR_ResolvedMethod * owningMethod = _methodSymbol->getResolvedMethod();
    if (!owningMethod->isUnresolvedCallSiteTableEntry(callSiteIndex))
       {
-      TR_ResolvedMethod *specimen = fej9()->createMethodHandleArchetypeSpecimen(trMemory(), (uintptrj_t*)owningMethod->callSiteTableEntryAddress(callSiteIndex), owningMethod);
+      TR_ResolvedMethod *specimen = fej9()->createMethodHandleArchetypeSpecimen(trMemory(), (uintptr_t*)owningMethod->callSiteTableEntryAddress(callSiteIndex), owningMethod);
       if (specimen)
          symRef = symRefTab()->findOrCreateMethodSymbol(_methodSymbol->getResolvedMethodIndex(), -1, specimen, TR::MethodSymbol::ComputedVirtual);
       }
@@ -3359,10 +3359,10 @@ TR_J9ByteCodeIlGenerator::genOrFindAdjunct(TR::Node* node)
    else
       {
       // expect that adjunct part is third child of node
-      TR_ASSERT(node->isDualHigh() || node->isTernaryHigh(),
-             "this node should be a dual or ternary, where the adjunct part of the answer is in the third child");
+      TR_ASSERT(node->isDualHigh() || node->isSelectHigh(),
+             "this node should be a dual or select, where the adjunct part of the answer is in the third child");
       adjunct = node->getChild(2);
-      if (node->isTernaryHigh())
+      if (node->isSelectHigh())
          {
          adjunct = adjunct->getFirstChild();
          }
@@ -3762,7 +3762,7 @@ TR_J9ByteCodeIlGenerator::genInvoke(TR::SymbolReference * symRef, TR::Node *indi
              n2->getSymbolReference()->getSymbol()->isStatic() &&
              n2->getSymbolReference()->getSymbol()->castToStaticSymbol()->isConstString())
             {
-             uintptrj_t offset = fej9()->getFieldOffset(comp(), n2->getSymbolReference(), n3->getSymbolReference() );
+             uintptr_t offset = fej9()->getFieldOffset(comp(), n2->getSymbolReference(), n3->getSymbolReference() );
              if (offset)
                {
                TR::Node * n ;
@@ -4656,7 +4656,7 @@ break
    // We disable this optimization for JITServer because TR_VMField is not supported on JITServer yet. Once we have decided how to build the data structures
    // required by this optimization efficiently, we can re-enable this optimization.
    if (cg()->getEnforceStoreOrder() && calledMethod->isConstructor()
-      #ifdef JITSERVER_SUPPORT
+      #ifdef J9VM_OPT_JITSERVER
          && !cg()->comp()->isOutOfProcessCompilation()
       #endif
       )
@@ -5263,7 +5263,7 @@ TR_J9ByteCodeIlGenerator::loadStatic(int32_t cpIndex)
             }
          case TR::Symbol::Com_ibm_oti_vm_VM_ADDRESS_SIZE:
             {
-            loadConstant(TR::iconst, (int32_t)sizeof(uintptrj_t));
+            loadConstant(TR::iconst, (int32_t)sizeof(uintptr_t));
             return;
             }
          default:
@@ -5334,7 +5334,7 @@ TR_J9ByteCodeIlGenerator::loadStatic(int32_t cpIndex)
       switch (type)
          {
          case TR::Address:
-            if ((void *)comp()->fej9()->getStaticReferenceFieldAtAddress((uintptrj_t)p) == 0)
+            if ((void *)comp()->fej9()->getStaticReferenceFieldAtAddress((uintptr_t)p) == 0)
                {
                loadConstant(TR::aconst, 0);
                break;
@@ -5508,7 +5508,7 @@ void
 TR_J9ByteCodeIlGenerator::loadConstant(TR::ILOpCodes loadop, void * constant)
    {
    TR::Node * node = TR::Node::create(loadop, 0);
-   node->setAddress((uintptrj_t)constant);
+   node->setAddress((uintptr_t)constant);
    push(node);
    }
 
@@ -5547,8 +5547,8 @@ TR_J9ByteCodeIlGenerator::loadFromCP(TR::DataType type, int32_t cpIndex)
             if (!isCondyPrimitive && !isCondyUnresolved)
                {
                TR::VMAccessCriticalSection condyCriticalSection(comp()->fej9());
-               uintptrj_t obj = 0;
-               uintptrj_t* objLocation = (uintptrj_t*)_methodSymbol->getResolvedMethod()->dynamicConstant(cpIndex, &obj);
+               uintptr_t obj = 0;
+               uintptr_t* objLocation = (uintptr_t*)_methodSymbol->getResolvedMethod()->dynamicConstant(cpIndex, &obj);
                if (obj == 0)
                   {
                   loadConstant(TR::aconst, (void *)0);
@@ -5649,8 +5649,8 @@ TR_J9ByteCodeIlGenerator::loadFromCP(TR::DataType type, int32_t cpIndex)
                                                             comp());
                   if (primitiveCondyCriticalSection.hasVMAccess())
                      {
-                     uintptrj_t obj = 0;
-                     uintptrj_t* objLocation = (uintptrj_t*)_methodSymbol->getResolvedMethod()->dynamicConstant(cpIndex, &obj);
+                     uintptr_t obj = 0;
+                     uintptr_t* objLocation = (uintptr_t*)_methodSymbol->getResolvedMethod()->dynamicConstant(cpIndex, &obj);
                      TR_ASSERT(obj, "Resolved primitive Constant Dynamic-type CP entry %d must have autobox object", cpIndex);
                      switch (returnTypeUtf8Data[0])
                         {
@@ -6649,14 +6649,14 @@ TR_J9ByteCodeIlGenerator::storeStatic(int32_t cpIndex)
 void
 TR_J9ByteCodeIlGenerator::storeDualAuto(TR::Node * storeValue, int32_t slot)
    {
-   TR_ASSERT(storeValue->isDualHigh() || storeValue->isTernaryHigh(), "Coerced types only happen when a dual or ternary operator is generated.");
+   TR_ASSERT(storeValue->isDualHigh() || storeValue->isSelectHigh(), "Coerced types only happen when a dual or select operator is generated.");
 
    // type may need to be coerced from TR::Address into the type of the value being stored
    TR::DataType type = storeValue->getDataType();
 
    // generate the two stores for the storeValue and its adjunct.
    TR::Node* adjunctValue = storeValue->getChild(2);
-   if (storeValue->isTernaryHigh())
+   if (storeValue->isSelectHigh())
       {
       adjunctValue = adjunctValue->getFirstChild();
       }
@@ -6684,7 +6684,7 @@ TR_J9ByteCodeIlGenerator::storeAuto(TR::DataType type, int32_t slot, bool isAdju
       }
 
    symRef = symRefTab()->findOrCreateAutoSymbol(_methodSymbol, slot, type, true, false, true, isAdjunct);
-   if (storeValue->isDualHigh() || storeValue->isTernaryHigh() || isAdjunct)
+   if (storeValue->isDualHigh() || storeValue->isSelectHigh() || isAdjunct)
       symRef->setIsDual();
 
    bool isStatic = _methodSymbol->isStatic();
@@ -6928,7 +6928,7 @@ int32_t
 TR_J9ByteCodeIlGenerator::genLookupSwitch()
    {
    int32_t i = 1;
-   while ((intptrj_t)&_code[_bcIndex+i] & 3) ++i; // 4 byte align
+   while ((intptr_t)&_code[_bcIndex+i] & 3) ++i; // 4 byte align
 
    int32_t bcIndex = _bcIndex + i;
    int32_t defaultTarget = nextSwitchValue(bcIndex) + _bcIndex;
@@ -6968,7 +6968,7 @@ int32_t
 TR_J9ByteCodeIlGenerator::genTableSwitch()
    {
    int32_t i = 1;
-   while ((intptrj_t)&_code[_bcIndex+i] & 3) ++i; // 4 byte align
+   while ((intptr_t)&_code[_bcIndex+i] & 3) ++i; // 4 byte align
 
    int32_t bcIndex = _bcIndex + i;
    int32_t defaultTarget = nextSwitchValue(bcIndex) + _bcIndex;
@@ -7074,7 +7074,7 @@ void TR_J9ByteCodeIlGenerator::genFullFence(TR::Node *node)
 
 void TR_J9ByteCodeIlGenerator::performClassLookahead(TR_PersistentClassInfo *classInfo)
    {
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    // Do not perform class lookahead in server mode
    if (comp()->isOutOfProcessCompilation())
       return;

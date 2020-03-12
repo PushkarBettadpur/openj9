@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2019 IBM Corp. and others
+ * Copyright (c) 2000, 2020 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -84,7 +84,7 @@ getJitEntryOffset(J9::PrivateLinkage::LinkageInfo * linkageInfo)
 TR_PersistentJittedBodyInfo *
 J9::Recompilation::getJittedBodyInfoFromPC(void * startPC)
    {
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    TR_ASSERT_FATAL(!TR::CompilationInfo::getStream(), "This routine must not be used on the Server for a remote compile!");
 #endif
 
@@ -105,7 +105,7 @@ J9::Recompilation::getJittedBodyInfoFromPC(void * startPC)
          linkageInfo);
       }
 
-   info = (*(TR_PersistentJittedBodyInfo * *) ((int8_t *) startPC + -(sizeof(uint32_t) + sizeof(intptrj_t))));
+   info = (*(TR_PersistentJittedBodyInfo * *) ((int8_t *) startPC + -(sizeof(uint32_t) + sizeof(intptr_t))));
 
    if (false && DEBUGIT)
       {
@@ -212,7 +212,7 @@ void
 J9::Recompilation::methodHasBeenRecompiled(void * oldStartPC, void * newStartPC, TR_FrontEnd * fe)
    {
    J9::PrivateLinkage::LinkageInfo * linkageInfo = J9::PrivateLinkage::LinkageInfo::get(oldStartPC);
-   intptrj_t distance, * patchAddr, newInstr, * codePtrAddr;
+   intptr_t distance, * patchAddr, newInstr, * codePtrAddr;
    int32_t bytesToSaveAtStart;
    int32_t jitEntryOffset = getJitEntryOffset(linkageInfo);
 
@@ -270,8 +270,8 @@ J9::Recompilation::methodHasBeenRecompiled(void * oldStartPC, void * newStartPC,
       }
    else
       {
-      intptrj_t oldAsmAddr = 0;
-      intptrj_t newAsmAddr = 0;
+      intptr_t oldAsmAddr = 0;
+      intptr_t newAsmAddr = 0;
       // Turn the call from samplingMethodRecompile to a call to samplingPatchCallSite
       // basically, the address following the BASR gets patched
       // BASR R4,0
@@ -281,15 +281,15 @@ J9::Recompilation::methodHasBeenRecompiled(void * oldStartPC, void * newStartPC,
       int32_t startPCToAsmOffset = OFFSET_INTEP_SAMPLING_RECOMPILE_METHOD_ADDRESS;
       int32_t requiredPad; // pad can vary between methods, so must calculate each time
 
-      requiredPad = (startPCToAsmOffset + jitEntryOffset) % sizeof(intptrj_t);
+      requiredPad = (startPCToAsmOffset + jitEntryOffset) % sizeof(intptr_t);
       if (requiredPad)
          {
-         requiredPad = sizeof(intptrj_t) - requiredPad;
+         requiredPad = sizeof(intptr_t) - requiredPad;
          }
 
-      patchAddr = (intptrj_t *) ((uint8_t *) oldStartPC + -(startPCToAsmOffset + requiredPad));
+      patchAddr = (intptr_t *) ((uint8_t *) oldStartPC + -(startPCToAsmOffset + requiredPad));
       oldAsmAddr = *patchAddr;
-      newAsmAddr = (intptrj_t) runtimeHelpers.getFunctionEntryPointOrConst(TR_S390samplingPatchCallSite);
+      newAsmAddr = (intptr_t) runtimeHelpers.getFunctionEntryPointOrConst(TR_S390samplingPatchCallSite);
 
       if (debug("traceRecompilation"))
          {
@@ -302,9 +302,9 @@ J9::Recompilation::methodHasBeenRecompiled(void * oldStartPC, void * newStartPC,
          }
 
 #if defined(TR_HOST_64BIT)
-      TR_ASSERT(0 == ((uint64_t) patchAddr % sizeof(intptrj_t)), "Address %p is not word aligned\n", patchAddr);
+      TR_ASSERT(0 == ((uint64_t) patchAddr % sizeof(intptr_t)), "Address %p is not word aligned\n", patchAddr);
 #else
-      TR_ASSERT(0 == ((uint32_t) patchAddr % sizeof(intptrj_t)), "Address %p is not word aligned\n", patchAddr);
+      TR_ASSERT(0 == ((uint32_t) patchAddr % sizeof(intptr_t)), "Address %p is not word aligned\n", patchAddr);
 #endif
       *patchAddr = newAsmAddr;
 

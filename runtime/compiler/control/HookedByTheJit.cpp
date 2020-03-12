@@ -78,7 +78,7 @@
 #include "runtime/HWProfiler.hpp"
 #include "runtime/LMGuardedStorage.hpp"
 #include "env/SystemSegmentProvider.hpp"
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 #include "control/JITServerHelpers.hpp"
 #include "runtime/JITServerIProfiler.hpp"
 #include "runtime/JITServerStatisticsThread.hpp"
@@ -754,7 +754,7 @@ void *jitLookupDLT(J9VMThread *currentThread, J9Method *method, UDATA bcIndex)
       return 0;
 
    J9DLTInformationBlock *dltBlock = &(currentThread->dltBlock);
-   dltBlock->dltSP = (uintptrj_t)CONVERT_TO_RELATIVE_STACK_OFFSET(currentThread, currentThread->sp);
+   dltBlock->dltSP = (uintptr_t)CONVERT_TO_RELATIVE_STACK_OFFSET(currentThread, currentThread->sp);
    dltBlock->dltEntry = dltEntry;
    return (void *)1;
    }
@@ -812,15 +812,15 @@ static void jitGCMapCheck(J9VMThread* vmThread, IDATA handlerKey, void* userData
 
    static char *verbose = feGetEnv("TR_GCMapCheckVerbose");
    if (verbose)
-      walkState.userData1 = (void*)((uintptrj_t) walkState.userData1 | 1);
+      walkState.userData1 = (void*)((uintptr_t) walkState.userData1 | 1);
 
    static char *local = feGetEnv("TR_GCMapCheckLocalScavenge");
    if (local)
-      walkState.userData1 = (void*)((uintptrj_t) walkState.userData1 | 2);
+      walkState.userData1 = (void*)((uintptr_t) walkState.userData1 | 2);
 
    static char *global = feGetEnv("TR_GCMapCheckGlobalScavenge");
    if (global)
-      walkState.userData1 = (void*)((uintptrj_t) walkState.userData1 | 4);
+      walkState.userData1 = (void*)((uintptr_t) walkState.userData1 | 4);
 
    vmThread->javaVM->walkStackFrames(vmThread, &walkState);
 
@@ -864,7 +864,7 @@ void DLTLogic(J9VMThread* vmThread, TR::CompilationInfo *compInfo)
    if (startPC ||
        walkState.method==0 ||
        (romMethod->modifiers & J9AccNative) ||
-       ((intptrj_t)(walkState.method->constantPool) & J9_STARTPC_JNI_NATIVE) ||
+       ((intptr_t)(walkState.method->constantPool) & J9_STARTPC_JNI_NATIVE) ||
        !J9ROMMETHOD_HAS_BACKWARDS_BRANCHES(romMethod) ||
        TR::CompilationInfo::getJ9MethodVMExtra(walkState.method)==J9_JIT_NEVER_TRANSLATE ||
        (J9CLASS_FLAGS(J9_CLASS_FROM_METHOD(walkState.method)) & J9AccClassHotSwappedOut) ||
@@ -957,7 +957,7 @@ void DLTLogic(J9VMThread* vmThread, TR::CompilationInfo *compInfo)
 
       // This setup is for matching dltEntry to the right transfer point. It can be an issue only
       // in rare situations where Java code is executed for asyncEvents, leading to recursive DLT.
-      dltBlock->dltSP = (uintptrj_t)CONVERT_TO_RELATIVE_STACK_OFFSET(vmThread, vmThread->sp);
+      dltBlock->dltSP = (uintptr_t)CONVERT_TO_RELATIVE_STACK_OFFSET(vmThread, vmThread->sp);
 
       dltBlock->dltEntry = compInfo->searchForDLTRecord(dltBlock->methods[idx], bcIndex);
       if (dltBlock->dltEntry != NULL)
@@ -1977,7 +1977,7 @@ IDATA dumpJitInfo(J9VMThread *crashedThread, char *logFileLabel, J9RASdumpContex
    {
    Trc_JIT_DumpStart(crashedThread);
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    if (context && context->javaVM && context->javaVM->jitConfig)
       {
       J9JITConfig *jitConfig = context->javaVM->jitConfig;
@@ -2501,13 +2501,13 @@ static void jitHookClassesUnload(J9HookInterface * * hookInterface, UDATA eventN
 
    bool firstRange = true;
    bool coldRangeUninitialized = true;
-   uintptrj_t rangeStartPC = 0;
-   uintptrj_t rangeEndPC = 0;
-   uintptrj_t rangeColdStartPC = 0;
-   uintptrj_t rangeColdEndPC = 0;
+   uintptr_t rangeStartPC = 0;
+   uintptr_t rangeEndPC = 0;
+   uintptr_t rangeColdStartPC = 0;
+   uintptr_t rangeColdEndPC = 0;
 
-   uintptrj_t rangeStartMD = 0;
-   uintptrj_t rangeEndMD = 0;
+   uintptr_t rangeStartMD = 0;
+   uintptr_t rangeEndMD = 0;
 
    TR_RuntimeAssumptionTable * rat = compInfo->getPersistentInfo()->getRuntimeAssumptionTable();
 
@@ -2738,8 +2738,8 @@ static void jitHookClassUnload(J9HookInterface * * hookInterface, UDATA eventNum
 
    J9Method * resolvedMethods = (J9Method *) fej9->getMethods((TR_OpaqueClassBlock*)j9clazz);
    uint32_t numMethods = fej9->getNumMethods((TR_OpaqueClassBlock*)j9clazz);
-   uintptrj_t methodsStartAddr = 0;
-   uintptrj_t methodsEndAddr = 0;
+   uintptr_t methodsStartAddr = 0;
+   uintptr_t methodsEndAddr = 0;
 
    if ( numMethods >0 )
       {
@@ -2779,7 +2779,7 @@ static void jitHookClassUnload(J9HookInterface * * hookInterface, UDATA eventNum
    if (table)
       table->classGotUnloaded(fej9, clazz);
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    // Add to JITServer unload list
    if (compInfo->getPersistentInfo()->getRemoteCompilationMode() == JITServer::CLIENT)
       compInfo->getUnloadedClassesTempList()->push_back(clazz);
@@ -3017,7 +3017,7 @@ void jitClassesRedefined(J9VMThread * currentThread, UDATA classCount, J9JITRede
    classPair = classList;
    for (i = 0; i < classCount; i++)
       {
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       // Add to JITServer unload list
       if (compInfo->getPersistentInfo()->getRemoteCompilationMode() == JITServer::CLIENT)
          compInfo->getUnloadedClassesTempList()->push_back((TR_OpaqueClassBlock *) classPair->oldClass);
@@ -3131,11 +3131,11 @@ void jitMethodBreakpointed(J9VMThread * vmThread, J9Method *j9method)
    J9JITConfig * jitConfig = vmThread->javaVM->jitConfig;
    TR::CompilationInfo * compInfo = TR::CompilationInfo::get(jitConfig);
    TR_RuntimeAssumptionTable *rat = compInfo->getPersistentInfo()->getRuntimeAssumptionTable();
-   OMR::RuntimeAssumption **headPtr = rat->getBucketPtr(RuntimeAssumptionOnMethodBreakPoint, TR_RuntimeAssumptionTable::hashCode((uintptrj_t)j9method));
+   OMR::RuntimeAssumption **headPtr = rat->getBucketPtr(RuntimeAssumptionOnMethodBreakPoint, TR_RuntimeAssumptionTable::hashCode((uintptr_t)j9method));
    TR_PatchNOPedGuardSiteOnMethodBreakPoint *cursor = (TR_PatchNOPedGuardSiteOnMethodBreakPoint *)(*headPtr);
    while (cursor)
       {
-      if (cursor->matches((uintptrj_t)j9method))
+      if (cursor->matches((uintptr_t)j9method))
          {
          TR::PatchNOPedGuardSite::compensate(0, cursor->getLocation(), cursor->getDestination());
          }
@@ -3230,11 +3230,11 @@ static void updateOverriddenFlag( J9VMThread *vm , J9Class *cl)
       J9Class * superCl = cl->superclasses[classDepth];
 
       J9VTableHeader * superVTableHeader = J9VTABLE_HEADER_FROM_RAM_CLASS(superCl);
-      intptrj_t methodCount =  (intptrj_t)superVTableHeader->size;
+      intptr_t methodCount =  (intptr_t)superVTableHeader->size;
       J9Method ** superVTable = J9VTABLE_FROM_HEADER(superVTableHeader);
       J9Method ** subVTable = J9VTABLE_FROM_RAM_CLASS(cl);
 
-      intptrj_t methodIndex=0;
+      intptr_t methodIndex=0;
 
       while(methodCount--)
          {
@@ -3479,13 +3479,13 @@ static void updateOverriddenFlag( J9VMThread *vm , J9Class *cl)
                J9VTableHeader * tempsuperVTableHeader;
                J9Method ** tempsuperVTable;
                J9Method * tempsuperMethod;
-               intptrj_t tempmethodCount;
+               intptr_t tempmethodCount;
                for(int32_t k=classDepth-1;k>=0;k--)
                   {
 
                   tempsuperCl = cl->superclasses[k];
                   tempsuperVTableHeader = J9VTABLE_HEADER_FROM_RAM_CLASS(tempsuperCl);
-                  tempmethodCount =  (intptrj_t)tempsuperVTableHeader->size;
+                  tempmethodCount =  (intptr_t)tempsuperVTableHeader->size;
 
                   if(methodIndex>= tempmethodCount)  //we are outside the grandparent's vft slots
                      break;
@@ -3523,13 +3523,13 @@ static void updateOverriddenFlag( J9VMThread *vm , J9Class *cl)
             J9VTableHeader * tempsuperVTableHeader;
             J9Method ** tempsuperVTable;
             J9Method * tempsuperMethod;
-            intptrj_t tempmethodCount;
+            intptr_t tempmethodCount;
             for(int32_t k=classDepth-1;k>=0;k--)
                {
 
                tempsuperCl = cl->superclasses[k];
                tempsuperVTableHeader = J9VTABLE_HEADER_FROM_RAM_CLASS(tempsuperCl);
-               tempmethodCount =  (intptrj_t)tempsuperVTableHeader->size;
+               tempmethodCount =  (intptr_t)tempsuperVTableHeader->size;
 
                if(methodIndex >= tempmethodCount) //we are outside the grandparent's vft slots
                   break;
@@ -3564,7 +3564,7 @@ static bool updateCHTable(J9VMThread * vmThread, J9Class  * cl)
    TR_PersistentCHTable * table = 0;
    if (TR::Options::getCmdLineOptions()->allowRecompilation()
       && !TR::Options::getCmdLineOptions()->getOption(TR_DisableCHOpts)
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
       )
@@ -4129,7 +4129,7 @@ static void jitHookClassLoad(J9HookInterface * * hookInterface, UDATA eventNum, 
 
    if (TR::Options::getCmdLineOptions()->allowRecompilation() 
       && !TR::Options::getCmdLineOptions()->getOption(TR_DisableCHOpts)
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
       )
@@ -4195,7 +4195,7 @@ static void jitHookClassLoad(J9HookInterface * * hookInterface, UDATA eventNum, 
 
    // Determine whether this class gets lock reservation
    if (options->getOption(TR_ReservingLocks)
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
       )
@@ -4284,7 +4284,7 @@ static void jitHookClassPreinitialize(J9HookInterface * * hookInterface, UDATA e
 
    if (TR::Options::getCmdLineOptions()->allowRecompilation() 
       && !TR::Options::getCmdLineOptions()->getOption(TR_DisableCHOpts)
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
       )
@@ -4754,7 +4754,7 @@ void JitShutdown(J9JITConfig * jitConfig)
    if (!vm->isAOT_DEPRECATED_DO_NOT_USE())
       stopSamplingThread(jitConfig);
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    JITServerStatisticsThread *statsThreadObj = ((TR_JitPrivateConfig*)(jitConfig->privateConfig))->statisticsThreadObject;
    if (statsThreadObj)
       {
@@ -4804,7 +4804,7 @@ void JitShutdown(J9JITConfig * jitConfig)
       j9tty_printf(PORTLIB, "\tNo prof. info because timestamp expired: %10d\n", TR_IProfiler::_STATS_timestampHasExpired);
       }
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
    static char * isPrintJITServerMsgStats = feGetEnv("TR_PrintJITServerMsgStats");
    if (isPrintJITServerMsgStats && compInfo->getPersistentInfo()->getRemoteCompilationMode() == JITServer::CLIENT)
       JITServerHelpers::printJITServerMsgStats(jitConfig);
@@ -5836,7 +5836,7 @@ static void iProfilerActivationLogic(J9JITConfig * jitConfig, TR::CompilationInf
          TR::PersistentInfo *persistentInfo = compInfo->getPersistentInfo();
          if (iProfiler 
             && iProfiler->getProfilerMemoryFootprint() < TR::Options::_iProfilerMemoryConsumptionLimit
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
             && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
             )
@@ -6721,13 +6721,13 @@ void jitHookJNINativeRegistered(J9HookInterface **hookInterface, UDATA eventNum,
       uint8_t *thunkStartPC = (uint8_t*) TR::CompilationInfo::getJ9MethodStartPC(method);
 
       // The address in the word immediately before the linkage info
-      uintptrj_t **addressSlot = (uintptrj_t **)(thunkStartPC - (4 + sizeof(uintptrj_t)));
+      uintptr_t **addressSlot = (uintptr_t **)(thunkStartPC - (4 + sizeof(uintptr_t)));
 
       // Write the address slot
-      *addressSlot = (uintptrj_t *) newAddress;
+      *addressSlot = (uintptr_t *) newAddress;
 
       // Sync/Flush
-      TR::CodeGenerator::syncCode((uint8_t*)addressSlot, sizeof(uintptrj_t));
+      TR::CodeGenerator::syncCode((uint8_t*)addressSlot, sizeof(uintptr_t));
 
       somethingWasDone = true;
       }
@@ -6736,11 +6736,11 @@ void jitHookJNINativeRegistered(J9HookInterface **hookInterface, UDATA eventNum,
       {
       OMR::CriticalSection registerNatives(assumptionTableMutex);
       TR_RuntimeAssumptionTable *rat = compInfo->getPersistentInfo()->getRuntimeAssumptionTable();
-      OMR::RuntimeAssumption **headPtr = rat->getBucketPtr(RuntimeAssumptionOnRegisterNative, TR_RuntimeAssumptionTable::hashCode((uintptrj_t)method));
+      OMR::RuntimeAssumption **headPtr = rat->getBucketPtr(RuntimeAssumptionOnRegisterNative, TR_RuntimeAssumptionTable::hashCode((uintptr_t)method));
       TR_PatchJNICallSite *cursor = (TR_PatchJNICallSite *)(*headPtr);
       while (cursor)
          {
-         if (cursor->matches((uintptrj_t)method))
+         if (cursor->matches((uintptr_t)method))
             {
             cursor->compensate(vm, 0, newAddress);
             }
@@ -6840,13 +6840,13 @@ static void jitReleaseCodeStackWalk(OMR_VMThread *omrVMThread, condYieldFromGCFu
    OMR::FaintCacheBlock *cursor = (OMR::FaintCacheBlock *)jitConfig->methodsToDelete;
    OMR::FaintCacheBlock *prev = 0;
 
-   uintptrj_t rangeStartPC = 0;
-   uintptrj_t rangeEndPC = 0;
-   uintptrj_t rangeColdStartPC = 0;
-   uintptrj_t rangeColdEndPC = 0;
+   uintptr_t rangeStartPC = 0;
+   uintptr_t rangeEndPC = 0;
+   uintptr_t rangeColdStartPC = 0;
+   uintptr_t rangeColdEndPC = 0;
 
-   uintptrj_t rangeStartMD = 0;
-   uintptrj_t rangeEndMD = 0;
+   uintptr_t rangeStartMD = 0;
+   uintptr_t rangeEndMD = 0;
 
    bool firstRange = true;
    bool coldRangeUninitialized = true;
@@ -6987,7 +6987,7 @@ int32_t setUpHooks(J9JavaVM * javaVM, J9JITConfig * jitConfig, TR_FrontEnd * vm)
    compInfo->setSamplingThreadLifetimeState(TR::CompilationInfo::SAMPLE_THR_NOT_CREATED); // just in case
    if (jitConfig->samplingFrequency 
       && !vmj9->isAOT_DEPRECATED_DO_NOT_USE()
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       && compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER
 #endif
       )
@@ -7067,7 +7067,7 @@ int32_t setUpHooks(J9JavaVM * javaVM, J9JITConfig * jitConfig, TR_FrontEnd * vm)
       {
       // Do not register the hook that sets method invocation counts in JITServer server mode
       // This ensures that interpreter will not send methods for compilation
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
       if (compInfo->getPersistentInfo()->getRemoteCompilationMode() != JITServer::SERVER)
 #endif
          {
@@ -7088,7 +7088,7 @@ int32_t setUpHooks(J9JavaVM * javaVM, J9JITConfig * jitConfig, TR_FrontEnd * vm)
             iProfiler->startIProfilerThread(javaVM);
             }
          if (TR::Options::getCmdLineOptions()->getOption(TR_NoIProfilerDuringStartupPhase)
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
             || compInfo->getPersistentInfo()->getRemoteCompilationMode() == JITServer::SERVER
 #endif
             )
@@ -7243,7 +7243,7 @@ int32_t setUpHooks(J9JavaVM * javaVM, J9JITConfig * jitConfig, TR_FrontEnd * vm)
    return 0;
    }
 
-#if defined(JITSERVER_SUPPORT)
+#if defined(J9VM_OPT_JITSERVER)
 int32_t startJITServer(J9JITConfig *jitConfig)
    {
    J9JavaVM *javaVM = jitConfig->javaVM;
@@ -7287,6 +7287,6 @@ int32_t waitJITServerTermination(J9JITConfig *jitConfig)
    rc = listener->waitForListenerThreadExit(javaVM);
    return rc;
    }
-#endif /* JITSERVER_SUPPORT */
+#endif /* J9VM_OPT_JITSERVER */
 
 } /* extern "C" */

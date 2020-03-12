@@ -207,7 +207,7 @@ private:
    //
    TR::TreeTop * genTreeTop(TR::Node *);
 
-   TR::Node    * loadConstantValueIfPossible(TR::Node *, uintptrj_t, TR::DataType type = TR::Int32, bool isArrayLength = true);
+   TR::Node    * loadConstantValueIfPossible(TR::Node *, uintptr_t, TR::DataType type = TR::Int32, bool isArrayLength = true);
 
    void         genArrayLength();
    void         genContiguousArrayLength(int32_t width);
@@ -355,9 +355,9 @@ private:
    bool replaceField(TR::Node* node, char* destClass, char* destFieldName, char* destFieldSignature, int ParmIndex);
    bool replaceStatic(TR::Node* node, char* dstClassName, char* staticName, char* type);
 
-   uintptrj_t walkReferenceChain(TR::Node *node, uintptrj_t receiver);
-#if defined(JITSERVER_SUPPORT)
-   void packReferenceChainOffsets(TR::Node *node, std::vector<uintptrj_t>& listOfOffsets);
+   uintptr_t walkReferenceChain(TR::Node *node, uintptr_t receiver);
+#if defined(J9VM_OPT_JITSERVER)
+   void packReferenceChainOffsets(TR::Node *node, std::vector<uintptr_t>& listOfOffsets);
 #endif
 
    bool hasFPU();
