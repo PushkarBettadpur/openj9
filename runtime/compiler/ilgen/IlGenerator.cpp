@@ -40,6 +40,7 @@
 #include "ilgen/J9ByteCodeIlGenerator.hpp"
 #include "optimizer/BoolArrayStoreTransformer.hpp"
 #include "ras/DebugCounter.hpp"
+#include "ras/ILValidator.hpp"
 #include "optimizer/TransformUtil.hpp"
 #include "env/JSR292Methods.h"
 
@@ -142,6 +143,16 @@ TR_J9ByteCodeIlGenerator::genIL()
    comp()->setCurrentIlGenerator(this);
 
    bool success = internalGenIL();
+
+   #if !defined(DISABLE_CFG_CHECK)
+   if (success && comp()->getOption(TR_UseILValidator))
+      {
+      /* Setup the ILValidator for the current Compilation Thread. */
+      TR::ILValidator *ilvalidator = new (comp()->trHeapMemory()) TR::ILValidator(comp());
+      comp()->setILValidator(ilvalidator);
+      }
+   #endif
+
 
    if (success && !comp()->isPeekingMethod())
       {
