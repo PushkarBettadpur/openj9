@@ -127,7 +127,6 @@
 
 static void printStack(TR::Compilation *comp, TR_Stack<TR::Node*> *stack, const char *message)
    {
-   return;
    // TODO: This should be in the debug DLL
    if (stack->isEmpty())
       {
@@ -136,6 +135,8 @@ static void printStack(TR::Compilation *comp, TR_Stack<TR::Node*> *stack, const 
    else
       {
       TR_BitVector nodesAlreadyPrinted(comp->getNodeCount(), comp->trMemory(), stackAlloc, growable);
+      if (comp->getDebug() == NULL)
+         return;
       comp->getDebug()->saveNodeChecklist(nodesAlreadyPrinted);
       char buf[30];
       traceMsg(comp, "   /--- %s ------------------------", message);
@@ -1225,7 +1226,6 @@ TR_J9ByteCodeIlGenerator::genTreeTop(TR::Node * n)
                   {
                   traceMsg(comp(), "Skipping OSR stack state for repeated call n%dn in treetop n%dn\n", n->getFirstChild()->getGlobalIndex(), n->getGlobalIndex());
                   }
-
                return _block->append(TR::TreeTop::create(comp(), n));
                }
             else
@@ -1235,7 +1235,6 @@ TR_J9ByteCodeIlGenerator::genTreeTop(TR::Node * n)
                TR::TreeTop *toReturn = _block->append(TR::TreeTop::create(comp(), n));
                saveStack(-1, !comp()->pendingPushLivenessDuringIlgen());
                stashPendingPushLivenessForOSR(comp()->getOSRInductionOffset(n));
-
                return toReturn;
                }
             }
@@ -2218,6 +2217,7 @@ TR_J9ByteCodeIlGenerator::calculateIndexFromOffsetInContiguousArray(int32_t widt
    }
 
 /*
+Pushkar Changes
 Method to create a simulated contiguous array view for arrays in Gencon.
 Effectively, the method takes in a pointer to the array header adds the size
 of the header (to get a pointer to the first data element).
@@ -2242,6 +2242,7 @@ TR_J9ByteCodeIlGenerator::createContiguousArrayView(TR::Node* arrayBase)
 
     /* create symbol for the array object reference (header pointer) */
     TR::SymbolReference *arrAddrSymRef = symRefTab()->createTemporary(_methodSymbol, TR::Address);
+    arrAddrSymRef->setReuse(false);
     TR::Node *arrStore = TR::Node::createStore(arrAddrSymRef, arrayBase);
     genTreeTop(arrStore);
    
@@ -2366,6 +2367,8 @@ TR_J9ByteCodeIlGenerator::calculateArrayElementAddress(TR::DataType dataType, bo
               traceMsg(comp(), "\n It is an Internal Pointer \n");     
           TR::Node * addNode = TR::Node::create(TR::aladd, 2, temp, lshl);
           _stack->push(addNode); 
+          _stack->top()->setIsInternalPointer(true);
+          _stack->top()->setPinningArrayPointer(temp->getPinningArrayPointer());
 
           //if (comp()->getOption(TR_TraceILGen))
           //    printStack(comp(), _stack, "stack after myOwnAddition");
