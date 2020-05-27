@@ -6409,6 +6409,7 @@ static void genHeapAlloc2(
    int32_t              allocationSizeOrDataOffset,
    int32_t              elementSize,
    TR::Register         *sizeReg,
+   TR::Register         *sizeOffsetReg,
    TR::Register         *eaxReal,
    TR::Register         *segmentReg,
    TR::Register         *tempReg,
@@ -6504,9 +6505,25 @@ static void genHeapAlloc2(
          //
          if (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && comp->useCompressedPointers()))
             {
+            traceMsg(cg->comp(), "Adding Size offset\n");
+            generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
             generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
-            generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
+            // Piggyback on this work to compute the offset from the class pointer
+            // Initialize offset register to 0
+            generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);            
+            generateRegRegInstruction(ADD4RegReg, node, segmentReg, sizeOffsetReg, cg);
+            generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
+            // int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
+            //generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
             }
+
+         else {
+            traceMsg(cg->comp(), "Adding Size offset for Non-compressed\n");
+            generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
+	    generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
+            generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);
+            generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
+         }
 
          uint8_t shiftVal = TR::MemoryReference::convertMultiplierToStride(elementSize);
          if (shiftVal > 0)
@@ -6913,6 +6930,7 @@ static void genInitArrayHeader(
       TR::Register *classReg,
       TR::Register *objectReg,
       TR::Register *sizeReg,
+      TR::Register *sizeOffsetReg,
       int32_t elementSize,
       int32_t arrayletDataOffset,
       TR::Register *tempReg,
@@ -6928,7 +6946,13 @@ static void genInitArrayHeader(
 
    int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
 
-   TR::MemoryReference *arraySizeMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
+   TR::MemoryReference *arraySizeMR;
+   if (sizeOffsetReg == NULL)
+      arraySizeMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
+   else {
+      generateRegImmInstruction(ADD4RegImm4, node, sizeOffsetReg, arraySizeOffset, cg);
+      arraySizeMR = generateX86MemoryReference(objectReg, sizeOffsetReg, 0, cg);
+   }
 
    TR::Compilation *comp = cg->comp();
 
@@ -7507,6 +7531,7 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
    TR::Register *tempReg         = NULL;
    TR::Register *targetReg       = NULL;
    TR::Register *sizeReg         = NULL;
+   TR::Register *sizeOffsetReg   = NULL;
 
 
    /**
@@ -7530,6 +7555,9 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
     *    inside the outlined codert asm sequences). This size is not available at non-outlined zero-initialization routine and needs
     *    to be re-materialized.
     *
+    * sizeOffsetReg stores the array offset to which we write the size of the data. This register is only used when sizeReg is non NULL 
+    *    i.e., for variable size allocations. The reason we need a separate register to store this offset is because we may have a 0 size 
+    *    array in which case the array's layout is discontiguous, thus changing the offset to of the size field in the array header.  
     */
 
    TR::RegisterDependencyConditions  *deps;
@@ -7649,6 +7677,7 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
    if (objectSize == 0)
       {
       sizeReg = cg->evaluate(node->getFirstChild());
+      sizeOffsetReg = cg->allocateRegister(); 
       allocationSize += dataOffset;
       if (comp->getOption(TR_TraceCG))
          traceMsg(comp, "allocationSize %d dataOffset %d\n", allocationSize, dataOffset);
@@ -7710,7 +7739,7 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
    //
    if (canUseFastInlineAllocation)
       {
-      genHeapAlloc2(node, clazz, allocationSize, elementSize, sizeReg, targetReg, segmentReg, tempReg, failLabel, cg);
+      genHeapAlloc2(node, clazz, allocationSize, elementSize, sizeReg, sizeOffsetReg, targetReg, segmentReg, tempReg, failLabel, cg);
       }
    else
       {
@@ -7900,6 +7929,7 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
             classReg,
             targetReg,
             sizeReg,
+            sizeOffsetReg,
             elementSize,
             dataOffset,
             tempReg,
@@ -7915,6 +7945,7 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
             NULL,
             targetReg,
             sizeReg,
+            sizeOffsetReg,
             elementSize,
             dataOffset,
             tempReg,
