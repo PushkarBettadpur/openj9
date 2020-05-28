@@ -6505,7 +6505,7 @@ static void genHeapAlloc2(
          //
          if (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && comp->useCompressedPointers()))
             {
-            traceMsg(cg->comp(), "Adding Size offset\n");
+            //traceMsg(cg->comp(), "Adding Size offset\n");
             generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
             generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
             // Piggyback on this work to compute the offset from the class pointer
@@ -6518,11 +6518,11 @@ static void genHeapAlloc2(
             }
 
          else {
-            traceMsg(cg->comp(), "Adding Size offset for Non-compressed\n");
-            generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
-	    generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
-            generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);
-            generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
+            //traceMsg(cg->comp(), "Adding Size offset for Non-compressed\n");
+            //generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
+	    //generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
+            //generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);
+            //generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
          }
 
          uint8_t shiftVal = TR::MemoryReference::convertMultiplierToStride(elementSize);
@@ -6947,12 +6947,12 @@ static void genInitArrayHeader(
    int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
 
    TR::MemoryReference *arraySizeMR;
-   if (sizeOffsetReg == NULL)
-      arraySizeMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
-   else {
+   if (sizeOffsetReg != NULL && (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && cg->comp()->useCompressedPointers()))) {
       generateRegImmInstruction(ADD4RegImm4, node, sizeOffsetReg, arraySizeOffset, cg);
       arraySizeMR = generateX86MemoryReference(objectReg, sizeOffsetReg, 0, cg);
    }
+   else
+      arraySizeMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
 
    TR::Compilation *comp = cg->comp();
 
