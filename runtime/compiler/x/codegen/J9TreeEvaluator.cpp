@@ -6433,7 +6433,7 @@ static void genHeapAlloc2(
       // because the helper will be called in that case.  It is necessary to insert this load here so that it dominates all
       // control paths through this internal control flow region.
       //
-
+      //printf("genHeapAlloc\n");
       if (sizeReg)
          {
 
@@ -6503,21 +6503,28 @@ static void genHeapAlloc2(
          // Native 64-bit array headers do not need this adjustment because the
          // contiguous and discontiguous array headers are the same size.
          //
-         if (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && comp->useCompressedPointers()))
-            {
-            //traceMsg(cg->comp(), "Adding Size offset\n");
-            generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
-            generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
-            // Piggyback on this work to compute the offset from the class pointer
-            // Initialize offset register to 0
-            generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);            
-            generateRegRegInstruction(ADD4RegReg, node, segmentReg, sizeOffsetReg, cg);
-            generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
-            // int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
-            //generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
+         //printf("Survived till here\n");
+         if (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && comp->useCompressedPointers())) {
+            if (TR::Compiler->om.usesDiscontiguousArraylets()) {
+               traceMsg(cg->comp(), "Adding Size offset\n");
+               generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
+               generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
+               // Piggyback on this work to compute the offset from the class pointer
+               // Initialize offset register to 0
+               generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);            
+               generateRegRegInstruction(ADD4RegReg, node, segmentReg, sizeOffsetReg, cg);
+               generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
+               // int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
+               //generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
             }
+            else {
+	       traceMsg(cg->comp(), "Not adding size offset\n");
+               generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
+               generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
+            }
+         }
 
-         else {
+         else if (TR::Compiler->om.usesDiscontiguousArraylets()) {
             //traceMsg(cg->comp(), "Adding Size offset for Non-compressed\n");
             //generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
 	    //generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
@@ -6947,9 +6954,11 @@ static void genInitArrayHeader(
    int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
 
    TR::MemoryReference *arraySizeMR;
-   if (sizeOffsetReg != NULL && (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && cg->comp()->useCompressedPointers()))) {
+   bool two_offset = false;
+   if (TR::Compiler->om.usesDiscontiguousArraylets() && sizeOffsetReg != NULL && (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && cg->comp()->useCompressedPointers()))) {
       generateRegImmInstruction(ADD4RegImm4, node, sizeOffsetReg, arraySizeOffset, cg);
       arraySizeMR = generateX86MemoryReference(objectReg, sizeOffsetReg, 0, cg);
+      two_offset = true;
    }
    else
       arraySizeMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
@@ -6972,6 +6981,13 @@ static void genInitArrayHeader(
          //
          TR_X86OpCodes storeOp = (cg->comp()->target().is64Bit() && !comp->useCompressedPointers()) ? S8MemReg : S4MemReg;
          generateMemRegInstruction(storeOp, node, arraySizeMR, sizeReg, cg);
+         if (two_offset) 
+             {
+             //printf("two_offset = true\n");
+             //traceMsg(cg->comp(), "two_offset = true\n");
+             TR::MemoryReference *backUpOffsetMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
+             generateMemRegInstruction(storeOp, node, backUpOffsetMR, sizeReg, cg);
+             }
          }
       else
          {
@@ -7677,7 +7693,6 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
    if (objectSize == 0)
       {
       sizeReg = cg->evaluate(node->getFirstChild());
-      sizeOffsetReg = cg->allocateRegister(); 
       allocationSize += dataOffset;
       if (comp->getOption(TR_TraceCG))
          traceMsg(comp, "allocationSize %d dataOffset %d\n", allocationSize, dataOffset);
@@ -7739,10 +7754,13 @@ J9::X86::TreeEvaluator::VMnewEvaluator(
    //
    if (canUseFastInlineAllocation)
       {
+      if (objectSize == 0)
+          sizeOffsetReg = cg->allocateRegister();
       genHeapAlloc2(node, clazz, allocationSize, elementSize, sizeReg, sizeOffsetReg, targetReg, segmentReg, tempReg, failLabel, cg);
       }
    else
       {
+      //printf("GenHeapAlloc\n");
       genHeapAlloc(node, clazz, allocationSize, elementSize, sizeReg, targetReg, segmentReg, tempReg, failLabel, cg);
       }
 
