@@ -74,6 +74,7 @@ SymbolReference::SymbolReference(
       }
 
    symRefTab->checkImmutable(self());
+   _reuse = true;
    }
 
 
