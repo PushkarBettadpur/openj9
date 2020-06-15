@@ -851,6 +851,13 @@ getS390zOS_supportsGuardedStorageFacility(void)
 static intptr_t
 getS390Description(struct J9PortLibrary *portLibrary, J9ProcessorDesc *desc)
 {
+        printf("Testing for Transactional Execution...");
+        if (testSTFLE(portLibrary, 73)) {
+            printf("Trans Exec Detected\n");
+        }
+        else
+            printf("Trans Exec Not Detected\n");
+
 /* Check hardware and OS (z/OS only) support for GS (guarded storage), RI (runtime instrumentation) and TE (transactional memory) */
 #if defined(J9ZOS390)
 #define S390_STFLE_BIT (0x80000000 >> 7)
