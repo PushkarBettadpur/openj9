@@ -6502,21 +6502,34 @@ static void genHeapAlloc2(
          //
          // Native 64-bit array headers do not need this adjustment because the
          // contiguous and discontiguous array headers are the same size.
-         //
-         //printf("Survived till here\n");
          if (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && comp->useCompressedPointers())) {
+            // For region based GC Policies (eg: Balanced), we could be inlining
+            // a 0 size array, which is discontiguous. In this case, we also need to adjust
+            // the offset at which we write the 'size' field as well. 
+            //
+            // See j9nonbuilder.h for how contiguous and discontiguous arrays are laid out. 
             if (TR::Compiler->om.usesDiscontiguousArraylets()) {
                traceMsg(cg->comp(), "Adding Size offset\n");
                generateRegImmInstruction(MOV4RegImm4, node, sizeOffsetReg, 0, cg);
                generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
-               // Piggyback on this work to compute the offset from the class pointer
-               // Initialize offset register to 0
+               // CF = 0 => contiguous array; CF = 1 => zero size discontiguous array
                generateRegImmInstruction(ADC4RegImm4, node, sizeOffsetReg, 0, cg);            
+               // segmentReg also needs to know what kind of array we're dealing with
                generateRegRegInstruction(ADD4RegReg, node, segmentReg, sizeOffsetReg, cg);
+               // After SHL:
+               // If Contiguous: sizeOffsetReg = 0
+               // If Discontiguous: sizeOffsetReg = 4
+               //
+	       // Final Value:
+               // If Contiguous: sizeOffset = offsetOfContiguousArray + 0
+               // If Discontiguous: sizeOffset = offsetOfContiguousArray + 4
+               // i.e. sizeOffsetReg = sizeOffsetReg + offsetOfContiguousArray
                generateRegImmInstruction(SHL4RegImm1, node, sizeOffsetReg, 2, cg);
-               // int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
-               //generateRegImmInstruction(ADC4RegImm4, node, segmentReg, 0, cg);
+               TR_J9VMBase *fej9 = (TR_J9VMBase *)(cg->fe());
+               int32_t arraySizeOffset = fej9->getOffsetOfContiguousArraySizeField();
+               generateRegImmInstruction(ADD4RegImm4, node, sizeOffsetReg, arraySizeOffset, cg);
             }
+            // Non Region Based GC policies (eg: Gencon)
             else {
 	       traceMsg(cg->comp(), "Not adding size offset\n");
                generateRegImmInstruction(CMP4RegImm4, node, segmentReg, 1, cg);
@@ -6956,7 +6969,7 @@ static void genInitArrayHeader(
    TR::MemoryReference *arraySizeMR;
    bool two_offset = false;
    if (TR::Compiler->om.usesDiscontiguousArraylets() && sizeOffsetReg != NULL && (cg->comp()->target().is32Bit() || (cg->comp()->target().is64Bit() && cg->comp()->useCompressedPointers()))) {
-      generateRegImmInstruction(ADD4RegImm4, node, sizeOffsetReg, arraySizeOffset, cg);
+      // In the cases where the sizeOffset has been correctly initialized, setup a memory reference for it
       arraySizeMR = generateX86MemoryReference(objectReg, sizeOffsetReg, 0, cg);
       two_offset = true;
    }
@@ -6983,8 +6996,21 @@ static void genInitArrayHeader(
          generateMemRegInstruction(storeOp, node, arraySizeMR, sizeReg, cg);
          if (two_offset) 
              {
-             //printf("two_offset = true\n");
-             //traceMsg(cg->comp(), "two_offset = true\n");
+             traceMsg(cg->comp(), "two_offset = true\n");
+             // In some cases, it is not enough to correctly write to the size offset. 
+             // In a discontiguous array, the `mustBeZero` field must also be set to zero.
+             // The key here is that the mustBeZero field for discontiguous arrays is located 
+             // at the same offset as the size field for contiguous-arrays. Since the only
+             // discontiguous arrays we find here are 0 size arrays, we can simulate zero-ing the mustBeZero
+             // by writing the size to the contiguous array size Offset.
+             //
+             // To understand why this works consider the following example:
+             // Contiguous array - writing size to contiguous-array-size-field. This duplicates the storeOp above but 
+             //                    is functionally correct
+             // Discontiguous array - writing size (0 in this case), to the contiguous-array-size-field. The 
+             //                       contiguous-array-size-field is located at the same offset as mustBeZero
+             //                       in discontiguous arrays. Hence we are writing 0 to the mustBeZero
+             //                       field.
              TR::MemoryReference *backUpOffsetMR = generateX86MemoryReference(objectReg, arraySizeOffset, cg);
              generateMemRegInstruction(storeOp, node, backUpOffsetMR, sizeReg, cg);
              }

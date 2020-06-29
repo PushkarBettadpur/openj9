@@ -5741,6 +5741,7 @@ static void genHeapAlloc(TR::Node *node, TR::Instruction *&iCursor, TR_OpaqueCla
       iCursor = generateTrg1MemInstruction(cg,TR::InstOpCode::Op_load, node, temp3Reg,
                                            new (cg->trHeapMemory()) TR::MemoryReference(temp3Reg, fej9->getRealtimeSizeClassesOffset(), TR::Compiler->om.sizeofReferenceAddress(), cg), iCursor);
 
+      traceMsg(cg->comp(), "genHeapAlloc: RealTimeGC\n");
       // heap allocation, so proceed
       if (isVariableLen)
          {
@@ -5752,9 +5753,10 @@ static void genHeapAlloc(TR::Node *node, TR::Instruction *&iCursor, TR_OpaqueCla
 
          iCursor = generateTrg1Src1ImmInstruction(cg,TR::InstOpCode::Op_cmpli, node, condReg, enumReg, ((int32_t)(maxSize)-allocSize)/elementSize, iCursor);
          iCursor = generateConditionalBranchInstruction(cg, TR::InstOpCode::bgt, node, callLabel, condReg, iCursor);
-
+         traceMsg(cg->comp(), "GenHeapAlloc: Before HybridArraylet Check\n");
          if (TR::Compiler->om.useHybridArraylets())
             {
+            traceMsg(cg->comp(), "GenHeapAlloc: Inside HybridArrayletCheck\n");
             // Zero length arrays are discontiguous (i.e. they also need the discontiguous length field to be 0) because
             // they are indistinguishable from non-zero length discontiguous arrays
             iCursor = generateTrg1Src1ImmInstruction(cg, TR::InstOpCode::cmpli4, node, condReg, enumReg, 0, iCursor);
@@ -6814,7 +6816,10 @@ TR::Register *J9::Power::TreeEvaluator::VMnewEvaluator(TR::Node *node, TR::CodeG
    if (objectSize < 0 || (objectSize == 0 && !usingTLH))
       doInline = false;
    isVariableLen = (objectSize == 0);
-
+   if (isVariableLen)
+       traceMsg(cg->comp(), "VMNewEvaluator: isVarialeLen = true\n");
+   else
+       traceMsg(cg->comp(), "VMNewEvaluator: isVarialeLen = false\n");
    allocateSize = objectSize;
 
    if (opCode == TR::New)
@@ -6871,6 +6876,7 @@ TR::Register *J9::Power::TreeEvaluator::VMnewEvaluator(TR::Node *node, TR::CodeG
          isArray = true;
          if (generateArraylets || TR::Compiler->om.useHybridArraylets())
             {
+            traceMsg(cg->comp(), "VMNewEvaluator: useHybridArraylets is true\n");
             if (node->getOpCodeValue() == TR::newarray)
                elementSize = TR::Compiler->om.getSizeOfArrayElement(node);
             else if (comp->useCompressedPointers())
@@ -6982,6 +6988,7 @@ TR::Register *J9::Power::TreeEvaluator::VMnewEvaluator(TR::Node *node, TR::CodeG
       // dataSizeReg is set to the size of data area if isVariableLen
       // is true, and either elementSize != 1 or needZeroInit is true
       // (and we only ever use dataSizeReg below in those cases).
+      traceMsg(cg->comp(), "VMNewEvaluator: Pre GenHeapAlloc\n");
       genHeapAlloc(node, iCursor, clazz, isVariableLen, enumReg, classReg, resReg, zeroReg, condReg, dataSizeReg, tmp5Reg, tmp4Reg, tmp3Reg, tmp6Reg, tmp7Reg, callLabel, doneLabel, allocateSize, elementSize,
             usingTLH, needZeroInit, conditions, cg);
 
